@@ -73,7 +73,10 @@ class MainActivity : ComponentActivity(), SerialInputOutputManager.Listener {
                 if (ACTION_USB_PERMISSION == intent.action) {
                     synchronized(this) {
                         val usbDevice: UsbDevice? =
-                            intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                            intent.getParcelableExtra(
+                                UsbManager.EXTRA_DEVICE,
+                                UsbDevice::class.java
+                            )
                         if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                             if (usbDevice != null) {
                                 //permission granted
@@ -148,13 +151,11 @@ class MainActivity : ComponentActivity(), SerialInputOutputManager.Listener {
         val usbConnection: UsbDeviceConnection? = usbManager.openDevice(driver.device)
         if (usbConnection == null && !usbManager.hasPermission(driver.device)) {
             connectionStatus = "Disconnected (permission pending)"
-            val flags =
-                PendingIntent.FLAG_MUTABLE
             val usbPermissionIntent = PendingIntent.getBroadcast(
                 this,
                 0,
                 Intent(ACTION_USB_PERMISSION),
-                flags
+                PendingIntent.FLAG_IMMUTABLE
             )
             usbManager.requestPermission(driver.device, usbPermissionIntent)
             return
@@ -281,14 +282,14 @@ fun QxDroidApp(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val statusColor = when {
-                            connectionStatus == "Connected" -> Color.Green
+                            connectionStatus == "Connected" -> Color(0, 102, 0)
                             connectionStatus.startsWith("Error") ||
                                     connectionStatus.startsWith("Disconnected (") ||
                                     connectionStatus == "Permission denied" -> Color.Red
                             else -> Color.Gray
                         }
                         Text(
-                            text = "Status: $connectionStatus",
+                            text = connectionStatus,
                             color = Color.White,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
