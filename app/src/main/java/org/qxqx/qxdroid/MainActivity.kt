@@ -13,26 +13,39 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import androidx.compose.ui.unit.dp
 import com.hoho.android.usbserial.driver.Cp21xxSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
@@ -49,7 +62,7 @@ class MainActivity : ComponentActivity(), SerialInputOutputManager.Listener {
     private lateinit var usbPermissionReceiver: BroadcastReceiver
     private var usbSerialPort: UsbSerialPort? = null
     private var withIoManager: Boolean = false
-    private var receivedData by mutableStateOf("No data received yet")
+    private val receivedData = mutableStateListOf<String>()
     private var connectionStatus by mutableStateOf("Disconnected")
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,12 +72,8 @@ class MainActivity : ComponentActivity(), SerialInputOutputManager.Listener {
             override fun onReceive(context: Context, intent: Intent) {
                 if (ACTION_USB_PERMISSION == intent.action) {
                     synchronized(this) {
-                        val usbDevice: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        val usbDevice: UsbDevice? =
                             intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-                        } else {
-                            @Suppress("DEPRECATION")
-                            intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
-                        }
                         if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                             if (usbDevice != null) {
                                 //permission granted
@@ -81,15 +90,22 @@ class MainActivity : ComponentActivity(), SerialInputOutputManager.Listener {
         enableEdgeToEdge()
         setContent {
             QxDroidTheme {
-                QxDroidApp(receivedData, connectionStatus)
+                QxDroidApp(receivedData, connectionStatus) { clearLog() }
             }
         }
         handleIntent(intent)
     }
 
+    private fun clearLog() {
+        receivedData.clear()
+    }
+
     override fun onNewData(data: ByteArray) {
         runOnUiThread {
-            receivedData = bytesToHex(data)
+            if (receivedData.isEmpty() || receivedData.last() == "No data received yet") {
+                receivedData.clear()
+            }
+            receivedData.add(bytesToHex(data))
         }
     }
 
@@ -132,11 +148,8 @@ class MainActivity : ComponentActivity(), SerialInputOutputManager.Listener {
         val usbConnection: UsbDeviceConnection? = usbManager.openDevice(driver.device)
         if (usbConnection == null && !usbManager.hasPermission(driver.device)) {
             connectionStatus = "Disconnected (permission pending)"
-            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val flags =
                 PendingIntent.FLAG_MUTABLE
-            } else {
-                0
-            }
             val usbPermissionIntent = PendingIntent.getBroadcast(
                 this,
                 0,
@@ -160,6 +173,8 @@ class MainActivity : ComponentActivity(), SerialInputOutputManager.Listener {
                 serialInputOutputManager?.start()
             }
             connectionStatus = "Connected"
+            receivedData.clear()
+            receivedData.add("No data received yet")
 
         } catch (e: IOException) {
             connectionStatus = "Error: ${e.message}"
@@ -182,12 +197,8 @@ class MainActivity : ComponentActivity(), SerialInputOutputManager.Listener {
 
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
-            val device: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val device: UsbDevice? =
                 intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
-            }
             device?.let {
                 this.deviceId = it.deviceId
                 portNum = 0
@@ -235,7 +246,11 @@ class MainActivity : ComponentActivity(), SerialInputOutputManager.Listener {
 
 @PreviewScreenSizes
 @Composable
-fun QxDroidApp(data: String, connectionStatus: String) {
+fun QxDroidApp(
+    data: List<String> = listOf("Sample Log 1", "Sample Log 2"),
+    connectionStatus: String = "Preview",
+    onClearLog: () -> Unit = {}
+) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
 
     NavigationSuiteScaffold(
@@ -256,12 +271,35 @@ fun QxDroidApp(data: String, connectionStatus: String) {
         }
     ) {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            if(currentDestination == AppDestinations.HOME) {
+            if (currentDestination == AppDestinations.HOME) {
                 Column(modifier = Modifier.padding(innerPadding)) {
-                    Text(text = "Status: $connectionStatus")
-                    Greeting(
-                        name = data,
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val statusColor = when {
+                            connectionStatus == "Connected" -> Color.Green
+                            connectionStatus.startsWith("Error") ||
+                                    connectionStatus.startsWith("Disconnected (") ||
+                                    connectionStatus == "Permission denied" -> Color.Red
+                            else -> Color.Gray
+                        }
+                        Text(
+                            text = "Status: $connectionStatus",
+                            color = Color.White,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(statusColor)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                        Button(onClick = onClearLog) {
+                            Text(text = "Clear Log")
+                        }
+                    }
+                    DataLog(log = data)
                 }
             }
         }
@@ -278,17 +316,18 @@ enum class AppDestinations(
 }
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
+fun DataLog(log: List<String>, modifier: Modifier = Modifier) {
+    LazyColumn(modifier = modifier) {
+        items(log) { line ->
+            Text(text = line, modifier = Modifier.padding(horizontal = 16.dp))
+        }
+    }
 }
 
 @Preview(showBackground = true)
 @Composable
-fun GreetingPreview() {
+fun DataLogPreview() {
     QxDroidTheme {
-        QxDroidApp(data = "Preview Data", connectionStatus = "Disconnected")
+        DataLog(log = listOf("7E0102030405067E", "7E0708090A0B0C7E"))
     }
 }
