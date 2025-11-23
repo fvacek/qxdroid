@@ -109,28 +109,13 @@ class SerialProtocolManager(
         val receivedCrcBytes = frame.copyOfRange(3 + length, 5 + length)
 
         val dataForCrc = frame.copyOfRange(1, 3 + length)
-        val calculatedCrc = crc16(dataForCrc)
+        val calculatedCrc = CRCCalculator.crc(dataForCrc)
         val receivedCrc = ((receivedCrcBytes[0].toInt() and 0xFF) shl 8) or (receivedCrcBytes[1].toInt() and 0xFF)
 
         val crcStatus = if (calculatedCrc == receivedCrc) "OK" else "FAIL"
         val logMessage = "CMD: ${bytesToHex(byteArrayOf(command.toByte()))} | LEN: $length | DATA: ${bytesToHex(data)} | CRC: ${bytesToHex(receivedCrcBytes)} ($crcStatus)"
         Log.i(TAG, "parseAndLogFrame: $logMessage")
         onProtocolMessage(logMessage)
-    }
-
-    private fun crc16(data: ByteArray): Int {
-        var crc = 0xFFFF
-        for (byte in data) {
-            crc = crc xor (byte.toInt() and 0xFF shl 8)
-            for (i in 0..7) {
-                crc = if ((crc and 0x8000) != 0) {
-                    (crc shl 1) xor 0x1021
-                } else {
-                    crc shl 1
-                }
-            }
-        }
-        return crc and 0xFFFF
     }
 
     private fun bytesToHex(bytes: ByteArray): String {
