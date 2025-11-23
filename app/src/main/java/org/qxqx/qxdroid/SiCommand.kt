@@ -1,5 +1,18 @@
 package org.qxqx.qxdroid
 
+enum class SiCmd(val code: Int) {
+    INVALID(0),
+    GET_CARD_5(0xB1),
+    CARD_DETECTED_5(0xE5),
+    CARD_REMOVED(0xE7),
+    CARD_DETECTED_8(0xE8);
+
+    companion object {
+        fun fromCode(code: Int): SiCmd =
+            entries.firstOrNull { it.code == code } ?: INVALID
+    }
+}
+
 enum class CardSerie(val code: UInt) {
     CARD_5(0u),
     CARD_8(2u),
@@ -61,11 +74,11 @@ fun toSiCommand(frame: DataFrame): SiCommand {
         throw IllegalArgumentException("Frame is corrupted")
     }
     return when (frame.command) {
-        0xE7 -> {
+        SiCmd.CARD_REMOVED.code -> {
             val (cardSerie, stationNumber, cardNumber) = parseDataLayoutCardDetectedRemoved(frame.data)
             SiCardRemoved(cardSerie, stationNumber, cardNumber)
         }
-        0xE5, 0xE8 -> {
+        SiCmd.CARD_DETECTED_5.code, SiCmd.CARD_DETECTED_8.code -> {
             val (cardSerie, stationNumber, cardNumber) = parseDataLayoutCardDetectedRemoved(frame.data)
             SiCardDetected(cardSerie, stationNumber, cardNumber)
         }
