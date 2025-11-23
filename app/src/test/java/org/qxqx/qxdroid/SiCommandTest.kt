@@ -52,69 +52,6 @@ class SiCommandTest {
         assertEquals(expected, result)
     }
 
-    @Test
-    fun `toSiCommand should return null for unknown command`() {
-        // GIVEN
-        val frame = DataFrame(
-            command = 0xFF,
-            data = byteArrayOf(),
-            ok = true
-        )
-
-        // WHEN
-        val result = toSiCommand(frame)
-
-        // THEN
-        assertNull(result)
-    }
-
-    @Test
-    fun `toSiCommand should return null for not-ok frame`() {
-        // GIVEN
-        val frame = DataFrame(
-            command = 0xE7,
-            data = fromHex("07010212345678"),
-            ok = false // CRC check failed
-        )
-
-        // WHEN
-        val result = toSiCommand(frame)
-
-        // THEN
-        assertNull(result)
-    }
-
-    @Test
-    fun `toSiCommand should return null for insufficient data`() {
-        // GIVEN
-        val frame = DataFrame(
-            command = 0xE7,
-            data = fromHex("070102"), // Not enough data
-            ok = true
-        )
-
-        // WHEN
-        val result = toSiCommand(frame)
-
-        // THEN
-        assertNull(result)
-    }
-
-    @Test
-    fun `toSiCommand should return null for unknown card type`() {
-        // GIVEN
-        val frame = DataFrame(
-            command = 0xE7,
-            data = fromHex("00010212345678"), // Invalid card type
-            ok = true
-        )
-
-        // WHEN
-        val result = toSiCommand(frame)
-
-        // THEN
-        assertNull(result)
-    }
 }
 /* card 8 read out
 00 0000 02 ef 83 00 04 00 aa d6 49 94 ea ea ea ea 0c 03

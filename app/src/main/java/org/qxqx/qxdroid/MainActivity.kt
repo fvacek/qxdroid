@@ -71,7 +71,7 @@ class MainActivity : ComponentActivity() {
 
         serialProtocolManager = SerialProtocolManager(
             onRawHexData = { hex -> runOnUiThread { hexLog.add(hex) } },
-            onProtocolMessage = { message -> logMessage(message) },
+            onDataFrame = { frame -> logDataFrame(frame) },
             onError = { e ->
                 runOnUiThread {
                     connectionStatus = "Error: ${e.message}"
@@ -116,12 +116,15 @@ class MainActivity : ComponentActivity() {
         hexLog.clear()
     }
 
-    private fun logMessage(message: String) {
+    private fun logDataFrame(dataFrame: DataFrame) {
         runOnUiThread {
-            if (protocolLog.isNotEmpty() && protocolLog.last() == "No data received yet") {
-                protocolLog.clear()
+            val logMessage = try {
+                val siCommand = toSiCommand(dataFrame)
+                siCommand.toString()
+            } catch (e: Exception) {
+                "${bytesToHex(byteArrayOf(dataFrame.command.toByte()))} | ${bytesToHex(dataFrame.data)}"
             }
-            protocolLog.add(message)
+            protocolLog.add(logMessage)
         }
     }
 
@@ -172,7 +175,6 @@ class MainActivity : ComponentActivity() {
             usbSerialPort?.let { serialProtocolManager.start(it) }
             connectionStatus = "Connected"
             clearLog()
-            logMessage("No data received yet")
         } catch (e: IOException) {
             connectionStatus = "Error: ${e.message}"
             disconnect()

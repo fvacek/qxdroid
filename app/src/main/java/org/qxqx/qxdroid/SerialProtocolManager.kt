@@ -3,7 +3,6 @@ package org.qxqx.qxdroid
 import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.util.SerialInputOutputManager
-import org.qxqx.qxdroid.SerialProtocolManager.Companion.TAG
 
 data class DataFrame(
     val command: Int,
@@ -53,7 +52,7 @@ data class DataFrame(
 
 class SerialProtocolManager(
     private val onRawHexData: (String) -> Unit,
-    private val onProtocolMessage: (String) -> Unit,
+    private val onDataFrame: (DataFrame) -> Unit,
     private val onError: (Exception) -> Unit
 ) : SerialInputOutputManager.Listener {
 
@@ -114,7 +113,6 @@ class SerialProtocolManager(
             val command = dataBuffer[1]
             if (command.toInt() and 0xFF < 0x80) {
                 val msg = "Unsupported frame (CMD < 0x80): ${bytesToHex(byteArrayOf(command))}"
-                onProtocolMessage(msg)
                 Log.w(TAG, "processDataBuffer: Unsupported frame (CMD < 0x80), discarding STX.")
                 dataBuffer.removeAt(0) // Discard STX and continue
                 continue
@@ -132,7 +130,6 @@ class SerialProtocolManager(
             // Check for ETX at the end of the frame
             if (dataBuffer[frameLength - 1] != ETX) {
                 val msg = "Malformed frame (bad ETX). Discarding STX."
-                onProtocolMessage(msg)
                 Log.w(TAG, "processDataBuffer: Malformed frame (bad ETX). Discarding STX.")
                 dataBuffer.removeAt(0) // Discard STX and retry
                 continue
@@ -153,11 +150,7 @@ class SerialProtocolManager(
         val dataFrame = DataFrame.fromData(frame)
         val logMessage = "${bytesToHex(byteArrayOf(dataFrame.command.toByte()))} | ${bytesToHex(dataFrame.data)} | $dataFrame.ok"
         Log.i(TAG, "parseAndLogFrame: $logMessage")
-        onProtocolMessage(logMessage)
-    }
-
-    private fun bytesToHex(bytes: ByteArray): String {
-        return bytes.joinToString("") { "%02x".format(it).uppercase() }
+        onDataFrame(dataFrame)
     }
 
     companion object {

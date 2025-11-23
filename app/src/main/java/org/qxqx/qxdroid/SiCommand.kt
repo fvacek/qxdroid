@@ -20,13 +20,21 @@ data class SiCardDetected(
     val cardSerie: CardSerie,
     val stationNumber: UInt,
     val cardNumber: ULong,
-) : SiCommand()
+) : SiCommand() {
+    override fun toString(): String {
+        return "Detected: $cardSerie, $cardNumber sn: $stationNumber"
+    }
+}
 
 data class SiCardRemoved(
     val cardSerie: CardSerie,
     val stationNumber: UInt,
     val cardNumber: ULong,
-) : SiCommand()
+) : SiCommand() {
+    override fun toString(): String {
+        return "Removed: $cardSerie, $cardNumber sn: $stationNumber"
+    }
+}
 
 private const val TAG = "SiCommand"
 
