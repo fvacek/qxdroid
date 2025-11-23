@@ -89,8 +89,18 @@ class MainActivity : ComponentActivity(), SerialInputOutputManager.Listener {
 
     override fun onNewData(data: ByteArray) {
         runOnUiThread {
-            receivedData = String(data)
+            receivedData = bytesToHex(data)
         }
+    }
+
+    private fun bytesToHex(bytes: ByteArray): String {
+        val hexChars = CharArray(bytes.size * 2)
+        for (j in bytes.indices) {
+            val v = bytes[j].toInt() and 0xFF
+            hexChars[j * 2] = "0123456789ABCDEF"[v ushr 4]
+            hexChars[j * 2 + 1] = "0123456789ABCDEF"[v and 0x0F]
+        }
+        return String(hexChars)
     }
 
     override fun onRunError(e: Exception?) {
@@ -202,6 +212,9 @@ class MainActivity : ComponentActivity(), SerialInputOutputManager.Listener {
             // Find the device by vendor ID
             val device = usbManager.deviceList.values.find { it.vendorId == 0x10C4 }
             device?.let {
+                this.deviceId = it.deviceId
+                portNum = 0
+                withIoManager = true
                 // Attempt to connect to the found device
                 connect(it)
             }
