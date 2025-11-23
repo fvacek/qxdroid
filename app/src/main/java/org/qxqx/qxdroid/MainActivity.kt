@@ -13,6 +13,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBox
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Button
@@ -269,6 +272,7 @@ fun QxDroidApp(
     ) {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
             if (currentDestination == AppDestinations.HOME) {
+                var isHexPaneExpanded by rememberSaveable { mutableStateOf(false) }
                 Column(modifier = Modifier.padding(innerPadding)) {
                     Row(
                         modifier = Modifier
@@ -298,16 +302,29 @@ fun QxDroidApp(
                     }
                     Column(Modifier.fillMaxSize()) {
                         Column(
-                            modifier = Modifier
-                                .weight(1f)
+                            modifier = if (isHexPaneExpanded) Modifier.weight(1f) else Modifier
                         ) {
-                            Text(
-                                "Hex Data",
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isHexPaneExpanded = !isHexPaneExpanded }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    "Hex Data",
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    imageVector = if (isHexPaneExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                    contentDescription = if (isHexPaneExpanded) "Collapse" else "Expand"
+                                )
+                            }
                             HorizontalDivider()
-                            DataLog(log = hexData)
+                            if (isHexPaneExpanded) {
+                                DataLog(log = hexData)
+                            }
                         }
                         Column(
                             modifier = Modifier
