@@ -3,6 +3,7 @@ package org.qxqx.qxdroid
 import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.util.SerialInputOutputManager
+import org.qxqx.qxdroid.SerialProtocolManager.Companion.TAG
 
 data class DataFrame(
     val command: Int,
@@ -27,6 +28,26 @@ data class DataFrame(
         result = 31 * result + data.contentHashCode()
         result = 31 * result + ok.hashCode()
         return result
+    }
+    companion object {
+        fun fromData(frame: ByteArray) : DataFrame {
+            val command = frame[1].toInt() and 0xFF
+            val length = frame[2].toInt() and 0xFF
+            val data = frame.copyOfRange(3, 3 + length)
+            val receivedCrcBytes = frame.copyOfRange(3 + length, 5 + length)
+
+            val dataForCrc = frame.copyOfRange(1, 3 + length)
+            val calculatedCrc = CrcCalculator.crc(dataForCrc)
+            val receivedCrc = ((receivedCrcBytes[0].toInt() and 0xFF) shl 8) or (receivedCrcBytes[1].toInt() and 0xFF)
+
+            val isCrcOk = calculatedCrc == receivedCrc && data.size == length
+            val dataFrame = DataFrame(
+                command = command,
+                data = data,
+                ok = isCrcOk
+            )
+            return dataFrame
+        }
     }
 }
 
@@ -129,24 +150,8 @@ class SerialProtocolManager(
     }
 
     private fun parseAndLogFrame(frame: ByteArray) {
-        val command = frame[1].toInt() and 0xFF
-        val length = frame[2].toInt() and 0xFF
-        val data = frame.copyOfRange(3, 3 + length)
-        val receivedCrcBytes = frame.copyOfRange(3 + length, 5 + length)
-
-        val dataForCrc = frame.copyOfRange(1, 3 + length)
-        val calculatedCrc = CrcCalculator.crc(dataForCrc)
-        val receivedCrc = ((receivedCrcBytes[0].toInt() and 0xFF) shl 8) or (receivedCrcBytes[1].toInt() and 0xFF)
-
-        val isCrcOk = calculatedCrc == receivedCrc && data.size == length
-        val dataFrame = DataFrame(
-            command = command,
-            data = data,
-            ok = isCrcOk
-        )
-
-        val crcStatus = if (dataFrame.ok) "OK" else "FAIL"
-        val logMessage = "${bytesToHex(byteArrayOf(dataFrame.command.toByte()))} | ${bytesToHex(dataFrame.data)} | $crcStatus"
+        val dataFrame = DataFrame.fromData(frame)
+        val logMessage = "${bytesToHex(byteArrayOf(dataFrame.command.toByte()))} | ${bytesToHex(dataFrame.data)} | $dataFrame.ok"
         Log.i(TAG, "parseAndLogFrame: $logMessage")
         onProtocolMessage(logMessage)
     }
