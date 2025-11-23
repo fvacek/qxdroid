@@ -1,6 +1,6 @@
 package org.qxqx.qxdroid
 
-object CRCCalculator {
+object CrcCalculator {
 
     private const val POLY = 0x8005
     private const val BITF = 0x8000

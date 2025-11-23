@@ -4,6 +4,32 @@ import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.util.SerialInputOutputManager
 
+data class DataFrame(
+    val command: Int,
+    val data: ByteArray,
+    val ok: Boolean,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as DataFrame
+
+        if (command != other.command) return false
+        if (!data.contentEquals(other.data)) return false
+        if (ok != other.ok) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = command
+        result = 31 * result + data.contentHashCode()
+        result = 31 * result + ok.hashCode()
+        return result
+    }
+}
+
 class SerialProtocolManager(
     private val onRawHexData: (String) -> Unit,
     private val onProtocolMessage: (String) -> Unit,
@@ -109,11 +135,18 @@ class SerialProtocolManager(
         val receivedCrcBytes = frame.copyOfRange(3 + length, 5 + length)
 
         val dataForCrc = frame.copyOfRange(1, 3 + length)
-        val calculatedCrc = CRCCalculator.crc(dataForCrc)
+        val calculatedCrc = CrcCalculator.crc(dataForCrc)
         val receivedCrc = ((receivedCrcBytes[0].toInt() and 0xFF) shl 8) or (receivedCrcBytes[1].toInt() and 0xFF)
 
-        val crcStatus = if (calculatedCrc == receivedCrc) "OK" else "FAIL"
-        val logMessage = "CMD: ${bytesToHex(byteArrayOf(command.toByte()))} | LEN: $length | DATA: ${bytesToHex(data)} | CRC: ${bytesToHex(receivedCrcBytes)} ($crcStatus)"
+        val isCrcOk = calculatedCrc == receivedCrc && data.size == length
+        val dataFrame = DataFrame(
+            command = command,
+            data = data,
+            ok = isCrcOk
+        )
+
+        val crcStatus = if (dataFrame.ok) "OK" else "FAIL"
+        val logMessage = "${bytesToHex(byteArrayOf(dataFrame.command.toByte()))} | ${bytesToHex(dataFrame.data)} | $crcStatus"
         Log.i(TAG, "parseAndLogFrame: $logMessage")
         onProtocolMessage(logMessage)
     }
