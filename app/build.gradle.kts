@@ -42,7 +42,7 @@ android {
 }
 
 dependencies {
-    implementation("com.github.mik3y:usb-serial-for-android:v3.9.0")
+    implementation(libs.usb.serial.for1.android)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
