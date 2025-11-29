@@ -5,37 +5,39 @@ object CrcCalculator {
     private const val POLY = 0x8005
     private const val BITF = 0x8000
 
-    /**
-     * Computes the custom CRC used in your protocol.
-     * This function preserves 100% compatibility with the original Java logic.
-     */
     fun crc(buffer: ByteArray): Int {
-        val count = buffer.size
-        var ptr = 0
+        // Handle edge cases for small buffers
+        if (buffer.size < 2) {
+            return if (buffer.isEmpty()) 0 else (buffer[0].toInt() and 0xFF shl 8)
+        }
 
-        // First 16-bit word
-        var crc = readWord(buffer, ptr)
-        ptr += 2
-
-        if (count > 2) {
-            var remainingWords = count / 2
-
-            repeat(remainingWords) { idx ->
-                val word = when {
-                    idx < remainingWords - 1 ->
-                        readWord(buffer, ptr).also { ptr += 2 }
-
-                    count % 2 == 1 ->
-                        ((buffer[count - 1].toInt() and 0xFF) shl 8) and 0xFFFF
-
-                    else -> 0
-                }
-
-                crc = mixWord(crc, word)
+        val initialCrc = readWord(buffer, 0)
+        
+        // Build a list of the remaining words to be mixed into the CRC.
+        // This precisely replicates the logic of the original imperative loop.
+        val wordsToMix = buildList {
+            var ptr = 2
+            // Add all the full words from the middle of the buffer
+            while (ptr < buffer.size - 1) {
+                add(readWord(buffer, ptr))
+                ptr += 2
+            }
+            // Handle the final word according to the original's logic
+            if (buffer.size % 2 == 1) {
+                // If the size is odd, the last word is formed from the last byte
+                add((buffer.last().toInt() and 0xFF) shl 8)
+            } else {
+                // If the size is even (and > 2), the last word is always zero
+                add(0)
             }
         }
 
-        return crc and 0xFFFF
+        // Use fold to apply the mixing function across the words
+        val finalCrc = wordsToMix.fold(initialCrc) { currentCrc, word ->
+            mixWord(currentCrc, word)
+        }
+
+        return finalCrc and 0xFFFF
     }
 
     /** Reads two bytes as an unsigned 16-bit big-endian value. */
@@ -47,19 +49,25 @@ object CrcCalculator {
      * Mixes a 16-bit word into the CRC (16 shift cycles with polynomial).
      */
     private fun mixWord(initialCrc: Int, word: Int): Int {
-        var crc = initialCrc and 0xFFFF
-        var valWork = word and 0xFFFF
+        var currentCrc = initialCrc and 0xFFFF
+        var currentWord = word and 0xFFFF
 
         repeat(16) {
-            val carryCrc = crc and BITF != 0
-            val carryVal = valWork and BITF != 0
+            val crcMsbSet = (currentCrc and BITF) != 0
+            val wordMsbSet = (currentWord and BITF) != 0
 
-            crc = ((crc shl 1) and 0xFFFF) + if (carryVal) 1 else 0
-            if (carryCrc) crc = crc xor POLY
+            // Shift CRC left and bring in the word's MSB
+            currentCrc = ((currentCrc shl 1) and 0xFFFF) + if (wordMsbSet) 1 else 0
+            
+            // If CRC's original MSB was set, XOR with polynomial
+            if (crcMsbSet) {
+                currentCrc = currentCrc xor POLY
+            }
 
-            valWork = (valWork shl 1) and 0xFFFF
+            // Shift word left to process the next bit
+            currentWord = (currentWord shl 1) and 0xFFFF
         }
 
-        return crc
+        return currentCrc
     }
 }
