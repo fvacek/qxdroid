@@ -4,60 +4,20 @@ import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.util.SerialInputOutputManager
 
-data class DataFrame(
-    val command: Int,
-    val data: ByteArray,
-    val ok: Boolean,
-) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-
-        other as DataFrame
-
-        if (command != other.command) return false
-        if (!data.contentEquals(other.data)) return false
-        if (ok != other.ok) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        var result = command
-        result = 31 * result + data.contentHashCode()
-        result = 31 * result + ok.hashCode()
-        return result
-    }
-    companion object {
-        fun fromData(frame: ByteArray) : DataFrame {
-            val command = frame[1].toInt() and 0xFF
-            val length = frame[2].toInt() and 0xFF
-            val data = frame.copyOfRange(3, 3 + length)
-            val receivedCrcBytes = frame.copyOfRange(3 + length, 5 + length)
-
-            val dataForCrc = frame.copyOfRange(1, 3 + length)
-            val calculatedCrc = CrcCalculator.crc(dataForCrc)
-            val receivedCrc = ((receivedCrcBytes[0].toInt() and 0xFF) shl 8) or (receivedCrcBytes[1].toInt() and 0xFF)
-
-            val isCrcOk = calculatedCrc == receivedCrc && data.size == length
-            val dataFrame = DataFrame(
-                command = command,
-                data = data,
-                ok = isCrcOk
-            )
-            return dataFrame
-        }
-    }
-}
-
-class SerialProtocolManager(
+class SerialPortManager(
     private val onRawHexData: (String) -> Unit,
-    private val onDataFrame: (DataFrame) -> Unit,
+    private val onDataFrame: (SiDataFrame) -> Unit,
     private val onError: (Exception) -> Unit
 ) : SerialInputOutputManager.Listener {
 
     private val dataBuffer = mutableListOf<Byte>()
     private var serialInputOutputManager: SerialInputOutputManager? = null
+
+    fun sendDataFrame(frame: SiDataFrame) {
+        Log.d(TAG, "Sending data frame: $frame.")
+        val data = frame.toByteArray()
+        serialInputOutputManager?.writeAsync(data)
+    }
 
     fun start(port: UsbSerialPort) {
         if (serialInputOutputManager == null) {
@@ -138,7 +98,7 @@ class SerialProtocolManager(
             // If we are here, we have a complete frame
             Log.d(TAG, "processDataBuffer: Found complete frame of length $frameLength.")
             val frame = dataBuffer.take(frameLength).toByteArray()
-            parseAndLogFrame(frame)
+            parseFrame(frame)
 
             // Remove the processed frame from the buffer
             Log.d(TAG, "processDataBuffer: Removing processed frame from buffer.")
@@ -146,11 +106,14 @@ class SerialProtocolManager(
         }
     }
 
-    private fun parseAndLogFrame(frame: ByteArray) {
-        val dataFrame = DataFrame.fromData(frame)
-        val logMessage = "${bytesToHex(byteArrayOf(dataFrame.command.toByte()))} | ${bytesToHex(dataFrame.data)} | $dataFrame.ok"
-        Log.i(TAG, "parseAndLogFrame: $logMessage")
-        onDataFrame(dataFrame)
+    private fun parseFrame(frame: ByteArray) {
+        try {
+            val dataFrame = SiDataFrame.fromData(frame)
+            Log.i(TAG, "New frame: $dataFrame")
+            onDataFrame(dataFrame)
+        } catch (e: Exception) {
+            Log.e(TAG, "parseAndLogFrame: Error parsing frame: ${e.message}")
+        }
     }
 
     companion object {

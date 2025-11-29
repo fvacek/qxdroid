@@ -6,7 +6,7 @@ import org.junit.Test
 class SiCommandTest {
 
     private fun fromHex(hexString: String): ByteArray {
-        val hexstr = hexString.replace(" ", "")
+        val hexstr = hexString.replace(Regex("\\s"), "")
         require(hexstr.length % 2 == 0) { "Hex string must have an even length" }
         return hexstr.chunked(2)
             .map { it.toInt(16).toByte() }
@@ -31,8 +31,8 @@ class SiCommandTest {
         )
 
         testCases.forEach { (hexString, expected) ->
-            val frame = DataFrame.fromData(fromHex(hexString))
-            val result = toSiCommand(frame)
+            val frame = SiDataFrame.fromData(fromHex(hexString))
+            val result = toSiRecCommand(frame)
 
             assertEquals("Failed frame: $hexString", expected, result)
 
@@ -42,25 +42,35 @@ class SiCommandTest {
     @Test
     fun `toSiCommand should parse SiCardRemoved frame`() {
         // GIVEN 02 e7 06 00 04 00 00 10 e9 17 80 03
-        val frame = DataFrame.fromData(fromHex("02 e7 06 00 04 00 16 f5 7f cb c3 03"))
+        val frame = SiDataFrame.fromData(fromHex("02 e7 06 00 04 00 16 f5 7f cb c3 03"))
         val expected = SiCardRemoved(
-            cardSerie = CardSerie.CARD_9,
+            cardSerie = CardSerie.CARD_5,
             stationNumber = 4u,
             cardNumber = 1504639uL
         )
-        val result = toSiCommand(frame)
+        val result = toSiRecCommand(frame)
         assertEquals(expected, result)
     }
 
+    @Test
+    fun `card 8 read out`() {
+        val data = """
+        02 ef 83 00 04 00 aa d6 49 94 ea ea ea ea 0c 03
+        9b f2 ee ee ee ee 0d 03 29 81 00 32 02 1b 01 16
+        f5 7f ff ff 3a ab 3b 3b ee ee 00 00 00 00 00 00
+        00 00 00 00 00 00 00 00 00 00 00 00 00 00 0c 32
+        a8 5f 0d 32 12 1c ee ee ee ee ee ee ee ee ee ee
+        ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee
+        ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee
+        ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee
+        ee ee ee ee ee ee ae a5 03
+        """.trimIndent()
+        val frame = SiDataFrame.fromData(fromHex(data))
+        val expected = GetSiCard5Resp(
+            stationNumber = 4u,
+            data = TODO(),
+        )
+        val result = toSiRecCommand(frame)
+        assertEquals(expected, result)
+    }
 }
-/* card 8 read out
-00 0000 02 ef 83 00 04 00 aa d6 49 94 ea ea ea ea 0c 03
-01 0010 9b f2 ee ee ee ee 0d 03 29 81 00 32 02 1b 01 16
-02 0020 f5 7f ff ff 3a ab 3b 3b ee ee 00 00 00 00 00 00
-03 0030 00 00 00 00 00 00 00 00 00 00 00 00 00 00 0c 32
-04 0040 a8 5f 0d 32 12 1c ee ee ee ee ee ee ee ee ee ee
-05 0050 ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee
-06 0060 ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee
-07 0070 ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee
-08 0080 ee ee ee ee ee ee ae a5 03
- */

@@ -67,20 +67,22 @@ class MainActivity : ComponentActivity() {
     private val hexLog = mutableStateListOf<String>()
     private var connectionStatus by mutableStateOf("Disconnected")
 
-    private lateinit var serialProtocolManager: SerialProtocolManager
+    private lateinit var siReader: SiReader
+    private lateinit var serialPortManager: SerialPortManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        serialProtocolManager = SerialProtocolManager(
+        siReader = SiReader { frame -> serialPortManager.sendDataFrame(frame) }
+        serialPortManager = SerialPortManager(
             onRawHexData = { hex -> runOnUiThread { hexLog.add(hex) } },
-            onDataFrame = { frame -> logDataFrame(frame) },
+            onDataFrame = { frame -> siReader.onDataFrame(frame) },
             onError = { e ->
                 runOnUiThread {
                     connectionStatus = "Error: ${e.message}"
                     disconnect()
                 }
-            }
+            },
         )
 
         usbPermissionReceiver = object : BroadcastReceiver() {
@@ -119,10 +121,10 @@ class MainActivity : ComponentActivity() {
         hexLog.clear()
     }
 
-    private fun logDataFrame(dataFrame: DataFrame) {
+    private fun logDataFrame(dataFrame: SiDataFrame) {
         runOnUiThread {
             val logMessage = try {
-                val siCommand = toSiCommand(dataFrame)
+                val siCommand = toSiRecCommand(dataFrame)
                 siCommand.toString()
             } catch (e: Exception) {
                 "${bytesToHex(byteArrayOf(dataFrame.command.toByte()))} | ${bytesToHex(dataFrame.data)}"
@@ -134,7 +136,7 @@ class MainActivity : ComponentActivity() {
     // --- USB Connection Logic ---
 
     private fun connect(device: UsbDevice) {
-        val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+        val usbManager = getSystemService(USB_SERVICE) as UsbManager
         connectionStatus = "Connecting..."
         var driver: UsbSerialDriver? = UsbSerialProber.getDefaultProber().probeDevice(device)
         if (driver == null) {
@@ -175,7 +177,7 @@ class MainActivity : ComponentActivity() {
         try {
             usbSerialPort?.open(usbConnection)
             usbSerialPort?.setParameters(38400, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-            usbSerialPort?.let { serialProtocolManager.start(it) }
+            usbSerialPort?.let { serialPortManager.start(it) }
             connectionStatus = "Connected"
             clearLog()
         } catch (e: IOException) {
@@ -185,7 +187,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun disconnect() {
-        serialProtocolManager.stop()
+        serialPortManager.stop()
         try {
             usbSerialPort?.close()
         } catch (ignored: IOException) {
@@ -216,10 +218,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        registerReceiver(usbPermissionReceiver, IntentFilter(ACTION_USB_PERMISSION), Context.RECEIVER_NOT_EXPORTED)
+        registerReceiver(usbPermissionReceiver, IntentFilter(ACTION_USB_PERMISSION),
+            RECEIVER_NOT_EXPORTED
+        )
 
         if (connectionStatus == "Disconnected") {
-            val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+            val usbManager = getSystemService(USB_SERVICE) as UsbManager
             // Find the device by vendor ID
             val device = usbManager.deviceList.values.find { it.vendorId == 0x10C4 }
             device?.let {
