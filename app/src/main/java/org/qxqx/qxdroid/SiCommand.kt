@@ -17,7 +17,7 @@ enum class SiCmd(val code: Int) {
     }
 }
 
-enum class CardSerie(val code: UInt) {
+enum class CardKind(val code: UInt) {
     CARD_5(0u),
     CARD_8(2u),
     CARD_9(1u),
@@ -26,7 +26,7 @@ enum class CardSerie(val code: UInt) {
     SIAC(15u);
 
     companion object {
-        fun fromCode(code: UInt): CardSerie =
+        fun fromCode(code: UInt): CardKind =
             entries.firstOrNull { it.code == code } ?: CARD_5
     }
 }
@@ -34,7 +34,7 @@ enum class CardSerie(val code: UInt) {
 sealed class SiRecCommand()
 
 data class SiCardDetected(
-    val cardSerie: CardSerie,
+    val cardSerie: CardKind,
     val stationNumber: UInt,
     val cardNumber: ULong,
 ) : SiRecCommand() {
@@ -44,7 +44,7 @@ data class SiCardDetected(
 }
 
 data class SiCardRemoved(
-    val cardSerie: CardSerie,
+    val cardSerie: CardKind,
     val stationNumber: UInt,
     val cardNumber: ULong,
 ) : SiRecCommand() {
@@ -54,11 +54,12 @@ data class SiCardRemoved(
 }
 
 data class SiPunch(
-    val code: UInt,
-    val time: UInt,
+    var code: UInt,
+    var time: UInt,
 )
 
 data class SiCard(
+    val cardKind: CardKind,
     val cardSerie: UByte,
     val cardNumber: ULong,
     val checkTime: UInt,
@@ -72,29 +73,39 @@ data class SiCard(
         punches.forEach { punch ->
             run {
                 no += 1
-                punchesStr += "%3d. %3d    %s".format(no, punch.code.toInt(), timeToString(punch.time))
+                punchesStr += "\n%3d. %3d    %s".format(no, punch.code.toInt(), timeToString(punch.time))
             }
         }
-        return """
-                =========================
-                SI CARD
-                serie: $cardSerie, number: $cardNumber
-                checkTime: ${timeToString(checkTime)}
-                startTime: ${timeToString(startTime)}
-                finishTime: ${timeToString(finishTime)}
-                $punchesStr
-                ---------------------------
-                """.trimIndent()
+        return """---------------------------
+SI CARD $cardNumber serie: $cardSerie
+checkTime: ${timeToString(checkTime)}
+startTime: ${timeToString(startTime)}
+finishTime: ${timeToString(finishTime)}
+$punchesStr
+---------------------------
+"""
     }
 }
 
+//data class ReadedSiCard (
+//    val card: SiCard,
+//    val punchCount: Int,
+//)
+
 data class GetSiCard5Resp(
-    val stationNumber: UInt,
+    val stationNumber: Int,
     val data: ByteArray
 ) : SiRecCommand() {
 }
 
-private fun parseDataLayoutCardDetectedRemoved(data: ByteArray): Triple<CardSerie, UInt, ULong> {
+data class GetSiCard89pResp(
+    val stationNumber: Int,
+    val blockNumber: Int,
+    val data: ByteArray
+) : SiRecCommand() {
+}
+
+private fun parseDataLayoutCardDetectedRemoved(data: ByteArray): Triple<CardKind, UInt, ULong> {
     // Assumed layout: [stationNumber: 2 bytes BE, cardNumber: 4 bytes BE]
     if (data.size != 6) {
         throw IllegalArgumentException("Data length must be 6 bytes")
@@ -102,7 +113,7 @@ private fun parseDataLayoutCardDetectedRemoved(data: ByteArray): Triple<CardSeri
 
     val stationNumber = (data[0].toUInt() and 0xFFu shl 8) or (data[1].toUInt() and 0xFFu)
 
-    val cardSerie = CardSerie.fromCode(data[2].toUInt() and 0xFFu)
+    val cardSerie = CardKind.fromCode(data[2].toUInt() and 0xFFu)
     val cardNumber = ((data[5].toUInt() and 0xFFu)) or
             ((data[4].toUInt() and 0xFFu) shl 8) or
             ((data[3].toUInt() and 0xFFu) shl 16)
@@ -128,10 +139,25 @@ fun toSiRecCommand(frame: SiDataFrame): SiRecCommand {
             if (frame.data.size != 128 + 2) {
                 throw IllegalArgumentException("Data length must be 130 bytes")
             }
-            val stationNumber = getUInt16(frame.data, 0)
+            val stationNumber = getUInt16(frame.data, 0).toInt()
             val data = frame.data.sliceArray(2..129)
             assert(data.size == 128)
             GetSiCard5Resp(stationNumber, data)
+        }
+        SiCmd.GET_CARD_8.code -> {
+            // STX, 0xEF, 0x83,
+            // CN1, CN0,
+            // BN
+            // 128 byte,
+            // CRC1, CRC0, ETX
+            if (frame.data.size != 128 + 3) {
+                throw IllegalArgumentException("Data length must be 131 bytes")
+            }
+            val stationNumber = getUInt16(frame.data, 0).toInt()
+            val blockNumber = getUByte(frame.data, 2).toInt()
+            val data = frame.data.sliceArray(3..130)
+            assert(data.size == 128)
+            GetSiCard89pResp(stationNumber, blockNumber, data)
         }
         else -> throw IllegalArgumentException("Unknown command 0x${frame.command.toString(16)}")
     }
@@ -150,16 +176,12 @@ open class GetSiCardBlock(
     val blockNumber: Byte,
 ) : SiSendCommand(cmd) {
     override fun toSiFrame(): SiDataFrame {
-        return SiDataFrame(command.code, byteArrayOf(0x01, blockNumber))
+        return SiDataFrame(command.code, byteArrayOf(blockNumber))
     }
 }
 
 // STX, 0xB1, 0x00, CRC1, CRC0, ETX
-class GetSiCard5Rq() : SiSendCommand(SiCmd.GET_CARD_5) {
-    override fun toSiFrame(): SiDataFrame {
-        return SiDataFrame(command.code, byteArrayOf(0x00))
-    }
-}
+class GetSiCard5Rq() : GetSiCardBlock(SiCmd.GET_CARD_5, 0)
 
 // STX, 0xE1, 0x01, BN, CRC1, CRC0, ETX
 class GetSiCard6Rq(
@@ -167,6 +189,6 @@ class GetSiCard6Rq(
 ) : GetSiCardBlock(SiCmd.GET_CARD_6, blockNumber)
 
 // STX, 0xEF, 0x01, BN, CRC1, CRC0, ETX
-class GetSiCard8Rq(
+class GetSiCard89pRq(
     blockNumber: Byte
 ) : GetSiCardBlock(SiCmd.GET_CARD_8, blockNumber)

@@ -10,13 +10,13 @@ class SiCommandTest {
         val testCases = listOf(
             // Example expected values — replace with your real ones
             "02 e5 06 00 04 00 00 10 e9 37 8c 03" to SiCardDetected(
-                cardSerie = CardSerie.CARD_5,
+                cardSerie = CardKind.CARD_5,
                 stationNumber = 4u,
                 cardNumber = 4329uL
             ),
 
             "02 e8 06 00 04 01 16 f5 7f af e2 03" to SiCardDetected(
-                cardSerie = CardSerie.CARD_9,
+                cardSerie = CardKind.CARD_9,
                 stationNumber = 4u,
                 cardNumber = 1504639uL
             )
@@ -36,7 +36,7 @@ class SiCommandTest {
         // GIVEN 02 e7 06 00 04 00 00 10 e9 17 80 03
         val frame = SiDataFrame.fromData(bytesFromHex("02 e7 06 00 04 00 16 f5 7f cb c3 03"))
         val expected = SiCardRemoved(
-            cardSerie = CardSerie.CARD_5,
+            cardSerie = CardKind.CARD_5,
             stationNumber = 4u,
             cardNumber = 1504639uL
         )
