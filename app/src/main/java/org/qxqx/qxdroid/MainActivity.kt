@@ -233,22 +233,20 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
-
     override fun onResume() {
         super.onResume()
-        registerReceiver(usbPermissionReceiver, IntentFilter(ACTION_USB_PERMISSION),
-            RECEIVER_NOT_EXPORTED
-        )
+        registerReceiver(usbPermissionReceiver, IntentFilter(ACTION_USB_PERMISSION), RECEIVER_NOT_EXPORTED)
 
-        if (connectionStatus == "Disconnected") {
+        if (usbSerialPort == null || usbSerialPort?.isOpen == false) {
             val usbManager = getSystemService(USB_SERVICE) as UsbManager
-            // Find the device by vendor ID
-            val device = usbManager.deviceList.values.find { it.vendorId == 0x10C4 }
-            device?.let {
-                this.deviceId = it.deviceId
-                portNum = 0
-                // Attempt to connect to the found device
-                connect(it)
+            val prober = UsbSerialProber.getDefaultProber()
+            for (device in usbManager.deviceList.values) {
+                val driver = prober.probeDevice(device) ?: if (device.vendorId == 0x10C4) Cp21xxSerialDriver(device) else null
+                if (driver != null) {
+                    this.portNum = 0 // Connect to the first port
+                    connect(device)
+                    break
+                }
             }
         }
     }
@@ -256,9 +254,14 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         unregisterReceiver(usbPermissionReceiver)
-        disconnect()
     }
 
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) {
+            disconnect()
+        }
+    }
 
     companion object {
         private const val ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION"
