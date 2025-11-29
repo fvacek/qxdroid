@@ -62,3 +62,4 @@ class SiCommandTest {
         assert(result is GetSiCard5Resp)
     }
 }
+

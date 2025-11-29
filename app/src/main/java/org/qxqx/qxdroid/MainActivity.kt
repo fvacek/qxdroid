@@ -9,6 +9,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -73,7 +74,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        siReader = SiReader { frame -> serialPortManager.sendDataFrame(frame) }
+        siReader = SiReader(
+            sendSiFrame = { frame -> serialPortManager.sendDataFrame(frame) },
+            onCardRead = { card -> logSiCard(card) }
+        )
         serialPortManager = SerialPortManager(
             onRawData = { data -> runOnUiThread { hexLog.add(bytesToHex(data)) } },
             onDataFrame = { frame ->
@@ -128,13 +132,17 @@ class MainActivity : ComponentActivity() {
 
     private fun logDataFrame(dataFrame: SiDataFrame) {
         runOnUiThread {
-            val logMessage = try {
-                val siCommand = toSiRecCommand(dataFrame)
-                siCommand.toString()
-            } catch (e: Exception) {
-                "${bytesToHex(byteArrayOf(dataFrame.command.toByte()))} | ${bytesToHex(dataFrame.data)}"
+            val cmd = toSiRecCommand(dataFrame)
+            if (cmd is SiCardDetected || cmd is SiCardRemoved) {
+                protocolLog.add(cmd.toString())
             }
-            protocolLog.add(logMessage)
+        }
+    }
+
+    private fun logSiCard(card: SiCard) {
+        //Log.d("MainActivity", "SI card read: ${card}.")
+        runOnUiThread {
+            protocolLog.add(card.toString())
         }
     }
 

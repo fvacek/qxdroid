@@ -66,6 +66,26 @@ data class SiCard(
     val finishTime: UInt,
     val punches: Array<SiPunch>,
 ) : SiRecCommand() {
+    override fun toString(): String {
+        var punchesStr = ""
+        var no = 0
+        punches.forEach { punch ->
+            run {
+                no += 1
+                punchesStr += "%3d. %3d    %s".format(no, punch.code.toInt(), timeToString(punch.time))
+            }
+        }
+        return """
+                =========================
+                SI CARD
+                serie: $cardSerie, number: $cardNumber
+                checkTime: ${timeToString(checkTime)}
+                startTime: ${timeToString(startTime)}
+                finishTime: ${timeToString(finishTime)}
+                $punchesStr
+                ---------------------------
+                """.trimIndent()
+    }
 }
 
 data class GetSiCard5Resp(

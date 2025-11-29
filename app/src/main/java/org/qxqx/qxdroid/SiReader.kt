@@ -6,6 +6,7 @@ private const val TAG = "SiReader"
 
 class SiReader(
     val sendSiFrame: (SiDataFrame) -> Unit,
+    val onCardRead: (SiCard) -> Unit,
 ) {
     fun onDataFrame(frame: SiDataFrame) {
         try {
@@ -46,6 +47,7 @@ class SiReader(
                 is GetSiCard5Resp -> {
                     Log.d(TAG, "Card5 read: $sicmd")
                     val card = parseCard5Data(sicmd.data)
+                    onCardRead(card)
                 }
 
                 else -> {

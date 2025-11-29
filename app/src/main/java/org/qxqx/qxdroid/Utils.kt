@@ -12,3 +12,15 @@ fun bytesFromHex(hexString: String): ByteArray {
         .map { it.toInt(16).toByte() }
         .toByteArray()
 }
+
+private const val NO_TIME = 61166u
+fun timeToString(time: UInt): String {
+    if (time == NO_TIME) {
+        return "--:--:--"
+    }
+    val sec = (time % 60u).toInt()
+    val min = ((time / 60u) % 60u).toInt()
+    val hour = ((time / 3600u) % 24u).toInt()
+    return "%02d:%02d:%02d".format(hour, min, sec)
+}
+
