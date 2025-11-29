@@ -45,21 +45,72 @@ class SiCommandTest {
     }
 
     @Test
-    fun `card 5 read out`() {
+    fun `empty card 5 read out`() {
         val data = """
         02
         B182
         0004
-        AA2A000110E9010000000000000000006510E9EEEE014C0156EEEE2801FA0007
-        0000EEEE00EEEE00EEEE00EEEE00EEEE0000EEEE00EEEE00EEEE00EEEE00EEEE
-        0000EEEE00EEEE00EEEE00EEEE00EEEE0000EEEE00EEEE00EEEE00EEEE00EEEE
-        0000EEEE00EEEE00EEEE00EEEE00EEEE0000EEEE00EEEE00EEEE00EEEE00EEEE
+        AA2A000110E901000000000000000000
+        6510E9EEEE014C0156EEEE2801FA0007
+        0000EEEE00EEEE00EEEE00EEEE00EEEE
+        0000EEEE00EEEE00EEEE00EEEE00EEEE
+        0000EEEE00EEEE00EEEE00EEEE00EEEE
+        0000EEEE00EEEE00EEEE00EEEE00EEEE
+        0000EEEE00EEEE00EEEE00EEEE00EEEE
+        0000EEEE00EEEE00EEEE00EEEE00EEEE
         E243
         03
         """.trimIndent()
         val frame = SiDataFrame.fromData(bytesFromHex(data))
-        val result = toSiRecCommand(frame)
-        assert(result is GetSiCard5Resp)
+        val resp = toSiRecCommand(frame)
+        assert(resp is GetSiCardResp)
+        val card = parseCard5Data((resp as GetSiCardResp).data)
+        assertEquals(card.cardNumber.toInt(), 4329)
+        assertEquals(card.punches.size, 0)
+    }
+
+    @Test
+    fun `card 9 read out`() {
+        val block_0 = """
+        02EF83
+        0004
+        00
+        5AB94994
+        EAEAEAEA
+        18019A6C
+        18049B1B
+        18039F0B
+        0066061E
+        0116F57E
+        FFFF7D24
+        3B3BEEEE
+        00000000
+        00000000
+        00000000
+        00000000
+        00000000
+        18649BB4
+        18659C4C
+        18679D2A
+        186A9DCD
+        18689E16
+        18669EE7
+        EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+        EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+        EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+        017003
+        """.trimIndent()
+        val frame = SiDataFrame.fromData(bytesFromHex(block_0))
+        val resp = toSiRecCommand(frame)
+        assert(resp is GetSiCardResp)
+        val card = parseCard9Data(null, 0, (resp as GetSiCardResp).data)
+        assertEquals(1504638, card.cardNumber.toInt())
+        assertEquals(6, card.punches.size)
+        assertEquals("10:58:52", timeToString(card.checkTime))
+        assertEquals("11:01:47", timeToString(card.startTime))
+        assertEquals("11:18:35", timeToString(card.finishTime))
+        assertEquals(100, card.punches[0].code)
+        assertEquals("11:04:20", timeToString(card.punches[0].time))
     }
 }
 

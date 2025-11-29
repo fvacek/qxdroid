@@ -54,17 +54,17 @@ data class SiCardRemoved(
 }
 
 data class SiPunch(
-    var code: UInt,
-    var time: UInt,
+    var code: Int,
+    var time: Int,
 )
 
 data class SiCard(
     val cardKind: CardKind,
-    val cardSerie: UByte,
-    val cardNumber: ULong,
-    val checkTime: UInt,
-    val startTime: UInt,
-    val finishTime: UInt,
+    val cardSerie: Int,
+    val cardNumber: Int,
+    val checkTime: Int,
+    val startTime: Int,
+    val finishTime: Int,
     val punches: Array<SiPunch>,
 ) : SiRecCommand() {
     override fun toString(): String {
@@ -73,7 +73,7 @@ data class SiCard(
         punches.forEach { punch ->
             run {
                 no += 1
-                punchesStr += "\n%3d. %3d    %s".format(no, punch.code.toInt(), timeToString(punch.time))
+                punchesStr += "\n%4d. %4d    %s".format(no, punch.code.toInt(), timeToString(punch.time))
             }
         }
         return """---------------------------
@@ -92,13 +92,13 @@ $punchesStr
 //    val punchCount: Int,
 //)
 
-data class GetSiCard5Resp(
-    val stationNumber: Int,
-    val data: ByteArray
-) : SiRecCommand() {
-}
+//data class GetSiCard5Resp(
+//    val stationNumber: Int,
+//    val data: ByteArray
+//) : SiRecCommand() {
+//}
 
-data class GetSiCard89pResp(
+data class GetSiCardResp(
     val stationNumber: Int,
     val blockNumber: Int,
     val data: ByteArray
@@ -142,7 +142,7 @@ fun toSiRecCommand(frame: SiDataFrame): SiRecCommand {
             val stationNumber = getUInt16(frame.data, 0).toInt()
             val data = frame.data.sliceArray(2..129)
             assert(data.size == 128)
-            GetSiCard5Resp(stationNumber, data)
+            GetSiCardResp(stationNumber, 0, data)
         }
         SiCmd.GET_CARD_8.code -> {
             // STX, 0xEF, 0x83,
@@ -157,7 +157,7 @@ fun toSiRecCommand(frame: SiDataFrame): SiRecCommand {
             val blockNumber = getUByte(frame.data, 2).toInt()
             val data = frame.data.sliceArray(3..130)
             assert(data.size == 128)
-            GetSiCard89pResp(stationNumber, blockNumber, data)
+            GetSiCardResp(stationNumber, blockNumber, data)
         }
         else -> throw IllegalArgumentException("Unknown command 0x${frame.command.toString(16)}")
     }

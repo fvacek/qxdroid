@@ -13,14 +13,14 @@ fun bytesFromHex(hexString: String): ByteArray {
         .toByteArray()
 }
 
-private const val NO_TIME = 61166u
-fun timeToString(time: UInt): String {
+private const val NO_TIME = 61166
+fun timeToString(time: Int): String {
     if (time == NO_TIME) {
         return "--:--:--"
     }
-    val sec = (time % 60u).toInt()
-    val min = ((time / 60u) % 60u).toInt()
-    val hour = ((time / 3600u) % 24u).toInt()
+    val sec = time % 60
+    val min = (time / 60) % 60
+    val hour = (time / 3600) % 24
     return "%02d:%02d:%02d".format(hour, min, sec)
 }
 
