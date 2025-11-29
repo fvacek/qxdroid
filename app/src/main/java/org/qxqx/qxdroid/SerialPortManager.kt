@@ -35,7 +35,7 @@ class SerialPortManager(
 
     override fun onNewData(data: ByteArray) {
         val hex = bytesToHex(data)
-        Log.d(TAG, "onNewData: Received ${data.size} bytes: $hex")
+        //Log.d(TAG, "onNewData: Received ${data.size} bytes: $hex")
         onRawHexData(hex)
         dataBuffer.addAll(data.toList())
         processDataBuffer()
@@ -47,15 +47,15 @@ class SerialPortManager(
     }
 
     private fun processDataBuffer() {
-        Log.d(TAG, "processDataBuffer: Starting with buffer size ${dataBuffer.size}")
+        //Log.d(TAG, "processDataBuffer: Starting with buffer size ${dataBuffer.size}")
         while (true) {
             // Find the start of a frame
             val stxIndex = dataBuffer.indexOf(STX)
             if (stxIndex == -1) {
-                Log.d(TAG, "processDataBuffer: No STX found, waiting for more data.")
+                //Log.d(TAG, "processDataBuffer: No STX found, waiting for more data.")
                 return // No STX found, wait for more data
             }
-            Log.d(TAG, "processDataBuffer: Found STX at index $stxIndex")
+            //Log.d(TAG, "processDataBuffer: Found STX at index $stxIndex")
 
             // Discard any data before STX
             if (stxIndex > 0) {
@@ -65,7 +65,7 @@ class SerialPortManager(
 
             // Need at least 3 bytes for STX, command, and length
             if (dataBuffer.size < 3) {
-                Log.d(TAG, "processDataBuffer: Buffer size ${dataBuffer.size} is too small for a header, waiting.")
+                //Log.d(TAG, "processDataBuffer: Buffer size ${dataBuffer.size} is too small for a header, waiting.")
                 return
             }
 
@@ -80,10 +80,10 @@ class SerialPortManager(
 
             val dataLength = dataBuffer[2].toInt() and 0xFF
             val frameLength = 1 + 1 + 1 + dataLength + 2 + 1 // STX, CMD, LEN, DATA, CRC, ETX
-            Log.d(TAG, "processDataBuffer: Expected frame length is $frameLength (data length: $dataLength)")
+            //Log.d(TAG, "processDataBuffer: Expected frame length is $frameLength (data length: $dataLength)")
 
             if (dataBuffer.size < frameLength) {
-                Log.d(TAG, "processDataBuffer: Buffer size ${dataBuffer.size} is too small for full frame, waiting.")
+                //Log.d(TAG, "processDataBuffer: Buffer size ${dataBuffer.size} is too small for full frame, waiting.")
                 return // Not enough data for the full frame, wait
             }
 
@@ -96,12 +96,12 @@ class SerialPortManager(
             }
 
             // If we are here, we have a complete frame
-            Log.d(TAG, "processDataBuffer: Found complete frame of length $frameLength.")
+            //Log.d(TAG, "processDataBuffer: Found complete frame of length $frameLength.")
             val frame = dataBuffer.take(frameLength).toByteArray()
             parseFrame(frame)
 
             // Remove the processed frame from the buffer
-            Log.d(TAG, "processDataBuffer: Removing processed frame from buffer.")
+            //Log.d(TAG, "processDataBuffer: Removing processed frame from buffer.")
             dataBuffer.subList(0, frameLength).clear()
         }
     }

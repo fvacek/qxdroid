@@ -7,7 +7,7 @@ data class SiDataFrame(
     val data: ByteArray,
 ) {
     override fun toString(): String {
-        return "${bytesToHex(byteArrayOf(command.toByte()))} | ${bytesToHex(data)}"
+        return "${bytesToHex(byteArrayOf(command.toByte()))}|${bytesToHex(data)}"
     }
 
     fun toByteArray(): ByteArray {
@@ -47,18 +47,18 @@ data class SiDataFrame(
         private const val TAG = "SiDataFrame"
 
         fun fromData(frame: ByteArray) : SiDataFrame {
-            Log.d(TAG, "frame: ${bytesToHex(frame)}")
+            //Log.d(TAG, "frame: ${bytesToHex(frame)}")
             val command = getUByte(frame, 1).toInt()
             val length = getUByte(frame, 2).toInt()
             val data = frame.copyOfRange(3, 3 + length)
-            Log.d(TAG, "data: ${bytesToHex(data)}")
+            //Log.d(TAG, "data: ${bytesToHex(data)}")
             // The CRC is computed including the command byte and the length byte.
             val dataForCrc = frame.copyOfRange(1, 3 + length)
-            Log.d(TAG, "dataForCrc: ${bytesToHex(dataForCrc)}")
+            //Log.d(TAG, "dataForCrc: ${bytesToHex(dataForCrc)}")
             val calculatedCrc = CrcCalculator.crc(dataForCrc)
-            Log.d(TAG, "calculatedCrc: ${calculatedCrc.toString(16)}")
+            //Log.d(TAG, "calculatedCrc: ${calculatedCrc.toString(16)}")
             val receivedCrc = getUInt16(frame, length + 3).toInt()
-            Log.d(TAG, "receivedCrc: ${receivedCrc.toString(16)}")
+            //Log.d(TAG, "receivedCrc: ${receivedCrc.toString(16)}")
 
             val isCrcOk = calculatedCrc == receivedCrc && data.size == length
             if (isCrcOk) {

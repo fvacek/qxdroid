@@ -16,7 +16,7 @@ class SiReader(
                     Log.d(TAG, "Card detected: $sicmd")
                     when (sicmd.cardSerie) {
                         CardSerie.CARD_5 -> {
-                            Log.d(TAG, "Card 5 detected")
+                            //Log.d(TAG, "Card 5 detected")
                             val cmd = GetSiCard5Rq()
                             sendSiFrame(cmd.toSiFrame())
                         }
