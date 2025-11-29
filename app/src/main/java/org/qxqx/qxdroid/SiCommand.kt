@@ -4,6 +4,7 @@ private const val TAG = "SiCommand"
 
 enum class SiCmd(val code: Int) {
     INVALID(0),
+    STATION_BEEP(0x06),
     GET_CARD_5(0xB1),
     GET_CARD_6(0xE1),
     GET_CARD_8(0xEF),

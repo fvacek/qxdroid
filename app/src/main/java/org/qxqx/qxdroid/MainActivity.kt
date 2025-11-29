@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
@@ -124,7 +125,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             QxDroidTheme {
-                QxDroidApp(hexLog, protocolLog, connectionStatus) { clearLog() }
+                QxDroidApp(hexLog, protocolLog, connectionStatus, onClearLog = { clearLog() }, onBeep = { beep() })
             }
         }
         handleIntent(intent)
@@ -134,7 +135,11 @@ class MainActivity : ComponentActivity() {
         protocolLog.clear()
         hexLog.clear()
     }
-
+    private fun beep() {
+        // doesn't work
+        val frame = SiDataFrame(0xe0, byteArrayOf())
+        serialPortManager.sendDataFrame(frame)
+    }
     private fun logDataFrame(dataFrame: SiDataFrame) {
         runOnUiThread {
             val cmd = toSiRecCommand(dataFrame)
@@ -274,7 +279,8 @@ fun QxDroidApp(
     hexData: List<String> = listOf("DEADBEEF"),
     protocolData: List<String> = listOf("CMD: 80 | LEN: 2 | DATA: 0102 | CRC: 0304 (OK)"),
     connectionStatus: String = "Preview",
-    onClearLog: () -> Unit = {}
+    onClearLog: () -> Unit = {},
+    onBeep: () -> Unit = {}
 ) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
 
@@ -320,27 +326,39 @@ fun QxDroidApp(
                 Column(modifier = Modifier.padding(innerPadding)) {
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val statusColor = when {
                             connectionStatus == "Connected" -> Color(0, 102, 0)
                             connectionStatus.startsWith("Error") ||
                                     connectionStatus.startsWith("Disconnected (") ||
-                                    connectionStatus == "Permission denied" -> Color.Red
+                                    connectionStatus == "Permission denied" ||
+                                    connectionStatus == "Disconnected"
+                             -> Color.Red
                             else -> Color.Gray
                         }
                         Text(
-                            text = "Status: $connectionStatus",
+                            text = connectionStatus,
                             color = Color.White,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(statusColor)
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
                         )
-                        Button(onClick = onClearLog) {
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        //Button(onClick = onBeep) {
+                        //    Text(text = "Beep")
+                        //}
+                        OutlinedButton(onClick = onClearLog) {
                             Text(text = "Clear Log")
                         }
                     }
