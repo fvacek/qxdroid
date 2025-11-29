@@ -101,17 +101,16 @@ fun toSiRecCommand(frame: SiDataFrame): SiRecCommand {
             SiCardDetected(cardSerie, stationNumber, cardNumber)
         }
         SiCmd.GET_CARD_5.code -> {
-            //STX, 0xB1,
-            // 0x82, CN1, CN0, 128 byte,
+            // STX, 0xB1, 0x82,
+            // CN1, CN0,
+            // 128 byte,
             // CRC1, CRC0, ETX
-            if (frame.data.size != 128 + 3) {
-                throw IllegalArgumentException("Data length must be 128 + 3 bytes")
+            if (frame.data.size != 128 + 2) {
+                throw IllegalArgumentException("Data length must be 130 bytes")
             }
-            if ((frame.data[0].toUInt() and 0xFFu) != 0x82u) {
-                throw IllegalArgumentException("Data[0] must be 0x82")
-            }
-            val stationNumber = (frame.data[1].toUInt() and 0xFFu shl 8) or (frame.data[2].toUInt() and 0xFFu)
-            val data = frame.data.sliceArray(3..130)
+            val stationNumber = getUInt16(frame.data, 0)
+            val data = frame.data.sliceArray(2..129)
+            assert(data.size == 128)
             GetSiCard5Resp(stationNumber, data)
         }
         else -> throw IllegalArgumentException("Unknown command 0x${frame.command.toString(16)}")

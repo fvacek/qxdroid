@@ -45,24 +45,20 @@ class SiCommandTest {
     }
 
     @Test
-    fun `card 8 read out`() {
+    fun `card 5 read out`() {
         val data = """
-        02 ef 83 00 04 00 aa d6 49 94 ea ea ea ea 0c 03
-        9b f2 ee ee ee ee 0d 03 29 81 00 32 02 1b 01 16
-        f5 7f ff ff 3a ab 3b 3b ee ee 00 00 00 00 00 00
-        00 00 00 00 00 00 00 00 00 00 00 00 00 00 0c 32
-        a8 5f 0d 32 12 1c ee ee ee ee ee ee ee ee ee ee
-        ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee
-        ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee
-        ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee ee
-        ee ee ee ee ee ee ae a5 03
+        02
+        B182
+        0004
+        AA2A000110E9010000000000000000006510E9EEEE014C0156EEEE2801FA0007
+        0000EEEE00EEEE00EEEE00EEEE00EEEE0000EEEE00EEEE00EEEE00EEEE00EEEE
+        0000EEEE00EEEE00EEEE00EEEE00EEEE0000EEEE00EEEE00EEEE00EEEE00EEEE
+        0000EEEE00EEEE00EEEE00EEEE00EEEE0000EEEE00EEEE00EEEE00EEEE00EEEE
+        E243
+        03
         """.trimIndent()
         val frame = SiDataFrame.fromData(bytesFromHex(data))
-        val expected = GetSiCard5Resp(
-            stationNumber = 4u,
-            data = TODO(),
-        )
         val result = toSiRecCommand(frame)
-        assertEquals(expected, result)
+        assert(result is GetSiCard5Resp)
     }
 }

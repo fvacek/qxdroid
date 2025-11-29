@@ -75,8 +75,13 @@ class MainActivity : ComponentActivity() {
 
         siReader = SiReader { frame -> serialPortManager.sendDataFrame(frame) }
         serialPortManager = SerialPortManager(
-            onRawHexData = { hex -> runOnUiThread { hexLog.add(hex) } },
-            onDataFrame = { frame -> siReader.onDataFrame(frame) },
+            onRawData = { data -> runOnUiThread { hexLog.add(bytesToHex(data)) } },
+            onDataFrame = { frame ->
+                run {
+                    siReader.onDataFrame(frame)
+                    logDataFrame(frame)
+                }
+            },
             onError = { e ->
                 runOnUiThread {
                     connectionStatus = "Error: ${e.message}"

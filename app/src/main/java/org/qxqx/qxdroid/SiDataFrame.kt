@@ -1,7 +1,5 @@
 package org.qxqx.qxdroid
 
-import android.util.Log
-
 data class SiDataFrame(
     val command: Int,
     val data: ByteArray,
@@ -15,12 +13,12 @@ data class SiDataFrame(
         val lengthByte = data.size.toByte()
 
         // The CRC is computed including the command byte and the length byte.
-        val crcData = byteArrayOf(commandByte, lengthByte)
-        val crcValue = CrcCalculator.crc(crcData)
+        val rawData = byteArrayOf(commandByte, lengthByte) + data
+        val crcValue = CrcCalculator.crc(rawData)
         val crc1 = (crcValue shr 8).toByte()
         val crc0 = crcValue.toByte()
 
-        return byteArrayOf(STX, commandByte, lengthByte) + data + byteArrayOf(crc1, crc0, ETX)
+        return byteArrayOf(STX) + rawData + byteArrayOf(crc1, crc0, ETX)
     }
 
     override fun equals(other: Any?): Boolean {

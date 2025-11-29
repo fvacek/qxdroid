@@ -3,25 +3,40 @@ package org.qxqx.qxdroid
 import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.util.SerialInputOutputManager
+import java.io.IOException
+import java.util.concurrent.Executors
 
 class SerialPortManager(
-    private val onRawHexData: (String) -> Unit,
+    private val onRawData: (ByteArray) -> Unit,
     private val onDataFrame: (SiDataFrame) -> Unit,
     private val onError: (Exception) -> Unit
 ) : SerialInputOutputManager.Listener {
 
     private val dataBuffer = mutableListOf<Byte>()
     private var serialInputOutputManager: SerialInputOutputManager? = null
+    private var port: UsbSerialPort? = null
+    private val serialExecutor = Executors.newSingleThreadExecutor()
 
     fun sendDataFrame(frame: SiDataFrame) {
-        Log.d(TAG, "Sending data frame: $frame.")
         val data = frame.toByteArray()
-        serialInputOutputManager?.writeAsync(data)
+        Log.d(TAG, "Sending data frame: ${bytesToHex(data)}.")
+        port?.let { p ->
+            serialExecutor.submit {
+                try {
+                    p.write(data, 500)
+                    Log.d(TAG, "Send OK")
+                } catch (e: IOException) {
+                    Log.e(TAG, "Error writing to serial port", e)
+                    onError(e)
+                }
+            }
+        } ?: Log.w(TAG, "Port not available, not sending data.")
     }
 
     fun start(port: UsbSerialPort) {
         if (serialInputOutputManager == null) {
             Log.d(TAG, "Starting SerialInputOutputManager in binary mode.")
+            this.port = port
             serialInputOutputManager = SerialInputOutputManager(port, this)
             serialInputOutputManager?.start()
         }
@@ -30,13 +45,14 @@ class SerialPortManager(
     fun stop() {
         Log.d(TAG, "Stopping SerialInputOutputManager.")
         serialInputOutputManager?.stop()
+        serialExecutor.shutdown()
         serialInputOutputManager = null
+        port = null
     }
 
     override fun onNewData(data: ByteArray) {
-        val hex = bytesToHex(data)
-        //Log.d(TAG, "onNewData: Received ${data.size} bytes: $hex")
-        onRawHexData(hex)
+        Log.d(TAG, "Serial data received ${data.size} bytes: ${bytesToHex(data)}")
+        onRawData(data)
         dataBuffer.addAll(data.toList())
         processDataBuffer()
     }
