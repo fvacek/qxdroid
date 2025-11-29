@@ -22,7 +22,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBox
@@ -37,9 +39,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,6 +59,7 @@ import com.hoho.android.usbserial.driver.Cp21xxSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
+import kotlinx.coroutines.launch
 import org.qxqx.qxdroid.ui.theme.QxDroidTheme
 import java.io.IOException
 
@@ -290,6 +295,25 @@ fun QxDroidApp(
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
             if (currentDestination == AppDestinations.HOME) {
                 var isHexPaneExpanded by rememberSaveable { mutableStateOf(false) }
+                val hexListState = rememberLazyListState()
+                val protocolListState = rememberLazyListState()
+                val coroutineScope = rememberCoroutineScope()
+
+                LaunchedEffect(hexData.size) {
+                    if (hexData.isNotEmpty()) {
+                        coroutineScope.launch {
+                            hexListState.animateScrollToItem(hexData.size - 1)
+                        }
+                    }
+                }
+                LaunchedEffect(protocolData.size) {
+                    if (protocolData.isNotEmpty()) {
+                        coroutineScope.launch {
+                            protocolListState.animateScrollToItem(protocolData.size - 1)
+                        }
+                    }
+                }
+
                 Column(modifier = Modifier.padding(innerPadding)) {
                     Row(
                         modifier = Modifier
@@ -340,7 +364,7 @@ fun QxDroidApp(
                             }
                             HorizontalDivider()
                             if (isHexPaneExpanded) {
-                                DataLog(log = hexData)
+                                DataLog(log = hexData, listState = hexListState)
                             }
                         }
                         Column(
@@ -353,7 +377,7 @@ fun QxDroidApp(
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                             )
                             HorizontalDivider()
-                            DataLog(log = protocolData)
+                            DataLog(log = protocolData, listState = protocolListState)
                         }
                     }
                 }
@@ -372,8 +396,12 @@ enum class AppDestinations(
 }
 
 @Composable
-fun DataLog(log: List<String>, modifier: Modifier = Modifier) {
-    LazyColumn(modifier = modifier) {
+fun DataLog(
+    log: List<String>,
+    modifier: Modifier = Modifier,
+    listState: LazyListState = rememberLazyListState()
+) {
+    LazyColumn(modifier = modifier, state = listState) {
         items(log) { line ->
             Text(text = line, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
         }
