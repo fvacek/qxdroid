@@ -1,5 +1,7 @@
 package org.qxqx.qxdroid
 
+import android.util.Log
+
 data class SiDataFrame(
     val command: Int,
     val data: ByteArray,
@@ -42,16 +44,21 @@ data class SiDataFrame(
         private const val STX: Byte = 0x02
         private const val ETX: Byte = 0x03
 
-        fun fromData(frame: ByteArray) : SiDataFrame {
-            val command = frame[1].toInt() and 0xFF
-            val length = frame[2].toInt() and 0xFF
-            val data = frame.copyOfRange(3, 3 + length)
-            val receivedCrcBytes = frame.copyOfRange(3 + length, 5 + length)
+        private const val TAG = "SiDataFrame"
 
+        fun fromData(frame: ByteArray) : SiDataFrame {
+            Log.d(TAG, "frame: ${bytesToHex(frame)}")
+            val command = getUByte(frame, 1).toInt()
+            val length = getUByte(frame, 2).toInt()
+            val data = frame.copyOfRange(3, 3 + length)
+            Log.d(TAG, "data: ${bytesToHex(data)}")
             // The CRC is computed including the command byte and the length byte.
-            val dataForCrc = frame.copyOfRange(1, 3)
+            val dataForCrc = frame.copyOfRange(1, 3 + length)
+            Log.d(TAG, "dataForCrc: ${bytesToHex(dataForCrc)}")
             val calculatedCrc = CrcCalculator.crc(dataForCrc)
-            val receivedCrc = ((receivedCrcBytes[0].toInt() and 0xFF) shl 8) or (receivedCrcBytes[1].toInt() and 0xFF)
+            Log.d(TAG, "calculatedCrc: ${calculatedCrc.toString(16)}")
+            val receivedCrc = getUInt16(frame, length + 3).toInt()
+            Log.d(TAG, "receivedCrc: ${receivedCrc.toString(16)}")
 
             val isCrcOk = calculatedCrc == receivedCrc && data.size == length
             if (isCrcOk) {

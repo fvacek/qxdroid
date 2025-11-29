@@ -6,11 +6,16 @@ import org.junit.Test
 class CrcCalculatorTest {
 
     @Test
-    fun `crc processes last chunk as zero for 4-byte array`() {
-        val buffer = bytesFromHex("53 00 05 01 0F B5 00 00 1E 08")
-        val result = CrcCalculator.crc(buffer)
-        val expected = 0x2C12
-        assertEquals(expected, result)
+    fun `crc test`() {
+        for ((data, expected) in listOf(
+            "53 00 05 01 0F B5 00 00 1E 08" to 0x2C12,
+            "E5060004000010E9" to 0x378C,
+            )
+        ) {
+            val buffer = bytesFromHex(data)
+            val result = CrcCalculator.crc(buffer)
+            assertEquals(expected, result)
+        }
     }
 
 }

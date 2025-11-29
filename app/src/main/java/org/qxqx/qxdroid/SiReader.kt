@@ -62,7 +62,10 @@ fun getUByte(data: ByteArray, offset: Int): UByte {
     return data[offset].toUByte()
 }
 fun getUInt16(data: ByteArray, offset: Int): UInt {
-    return data[offset].toUInt() * 256u + data[offset + 1].toUInt()
+    val hi = data[offset].toUByte()
+    val lo = data[offset + 1].toUByte()
+    val ret = hi * 256u + lo
+    return ret
 }
 private fun parseCard5Data(data: ByteArray): SiCard {
     val byte: (Int) -> UByte = { offset -> data[offset].toUByte() }
