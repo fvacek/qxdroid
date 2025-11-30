@@ -1,4 +1,4 @@
-package org.qxqx.qxdroid
+package org.qxqx.qxdroid.si
 
 sealed class ReadOutObject {
     data class CardReadObject(val card: SiCard) : ReadOutObject()

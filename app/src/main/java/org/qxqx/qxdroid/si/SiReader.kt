@@ -1,4 +1,4 @@
-package org.qxqx.qxdroid
+package org.qxqx.qxdroid.si
 
 import android.util.Log
 
@@ -125,7 +125,15 @@ fun parseCard5Data(data: ByteArray): SiCard {
         punches.add(punch)
         //Log.d(TAG, "Punch: $punch")
     }
-    return SiCard(CardKind.CARD_5, cardSerie, cardNumber, checkTime, startTime, finishTime, punches.toTypedArray())
+    return SiCard(
+        CardKind.CARD_5,
+        cardSerie,
+        cardNumber,
+        checkTime,
+        startTime,
+        finishTime,
+        punches.toTypedArray()
+    )
 }
 
 private fun parseCard89FirstBlockData(cardKind: CardKind, data: ByteArray): SiCard {

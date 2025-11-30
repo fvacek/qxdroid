@@ -1,4 +1,6 @@
-package org.qxqx.qxdroid
+package org.qxqx.qxdroid.si
+
+import org.qxqx.qxdroid.timeToString
 
 private const val TAG = "SiCommand"
 
@@ -74,7 +76,9 @@ data class SiCard(
         punches.forEach { punch ->
             run {
                 no += 1
-                punchesStr += "\n%4d. %4d    %s".format(no, punch.code.toInt(), timeToString(punch.time))
+                punchesStr += "\n%4d. %4d    %s".format(no, punch.code.toInt(),
+                    timeToString(punch.time)
+                )
             }
         }
         return """---------------------------

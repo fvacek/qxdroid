@@ -29,10 +29,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBox
+import androidx.compose.material.icons.filled.AppShortcut
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
@@ -56,12 +56,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
+
 import com.hoho.android.usbserial.driver.Cp21xxSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import java.io.IOException
 import kotlinx.coroutines.launch
+import org.qxqx.qxdroid.si.CardKind
+import org.qxqx.qxdroid.si.ReadOutObject
+import org.qxqx.qxdroid.si.SerialPortManager
+import org.qxqx.qxdroid.si.SiCard
+import org.qxqx.qxdroid.si.SiCardDetected
+import org.qxqx.qxdroid.si.SiCardRemoved
+import org.qxqx.qxdroid.si.SiDataFrame
+import org.qxqx.qxdroid.si.SiReader
+import org.qxqx.qxdroid.si.toSiRecCommand
 import org.qxqx.qxdroid.ui.theme.QxDroidTheme
 
 class MainActivity : ComponentActivity() {
@@ -280,12 +290,19 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun QxDroidApp(
     hexData: List<String> = listOf("DEADBEEF"),
-    readOutObjectData: List<ReadOutObject> = listOf(ReadOutObject.Command(SiCardDetected(CardKind.CARD_5, 2u, 12345uL))),
+    readOutObjectData: List<ReadOutObject> = listOf(
+        ReadOutObject.Command(
+        SiCardDetected(
+            CardKind.CARD_5,
+            2u,
+            12345uL
+        )
+    )),
     connectionStatus: String = "Preview",
     onClearLog: () -> Unit = {},
     onBeep: () -> Unit = {}
 ) {
-    var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
+    var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.SI_READER) }
 
     NavigationSuiteScaffold(
         navigationSuiteItems = {
@@ -305,7 +322,7 @@ fun QxDroidApp(
         }
     ) {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            if (currentDestination == AppDestinations.HOME) {
+            if (currentDestination == AppDestinations.SI_READER) {
                 var isHexPaneExpanded by rememberSaveable { mutableStateOf(false) }
                 val hexListState = rememberLazyListState()
                 val readActivityDataState = rememberLazyListState()
@@ -415,8 +432,8 @@ enum class AppDestinations(
     val label: String,
     val icon: ImageVector,
 ) {
-    HOME("Home", Icons.Default.Home),
-    FAVORITES("Favorites", Icons.Default.Favorite),
+    SI_READER("Reader", Icons.Default.AppShortcut),
+    SHV_CLOUD("Cloud", Icons.Filled.Cloud),
     PROFILE("Profile", Icons.Default.AccountBox),
 }
 

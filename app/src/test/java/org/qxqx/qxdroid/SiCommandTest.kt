@@ -2,6 +2,14 @@ package org.qxqx.qxdroid
 
 import org.junit.Assert.*
 import org.junit.Test
+import org.qxqx.qxdroid.si.CardKind
+import org.qxqx.qxdroid.si.GetSiCardResp
+import org.qxqx.qxdroid.si.SiCardDetected
+import org.qxqx.qxdroid.si.SiCardRemoved
+import org.qxqx.qxdroid.si.SiDataFrame
+import org.qxqx.qxdroid.si.parseCard5Data
+import org.qxqx.qxdroid.si.parseCard9Data
+import org.qxqx.qxdroid.si.toSiRecCommand
 
 class SiCommandTest {
 

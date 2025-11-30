@@ -1,10 +1,10 @@
-package org.qxqx.qxdroid
+package org.qxqx.qxdroid.si
 
 import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.util.SerialInputOutputManager
-import java.io.IOException
-import java.util.concurrent.Executors
+import org.qxqx.qxdroid.si.SiDataFrame
+import org.qxqx.qxdroid.bytesToHex
 
 class SerialPortManager(
     private val onRawData: (ByteArray) -> Unit,
@@ -125,7 +125,7 @@ class SerialPortManager(
 
     private fun parseFrame(frame: ByteArray) {
         try {
-            val dataFrame = SiDataFrame.fromData(frame)
+            val dataFrame = SiDataFrame.Companion.fromData(frame)
             Log.i(TAG, "New frame: $dataFrame")
             onDataFrame(dataFrame)
         } catch (e: Exception) {

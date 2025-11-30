@@ -2,6 +2,7 @@ package org.qxqx.qxdroid
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.qxqx.qxdroid.si.CrcCalculator
 
 class CrcCalculatorTest {
 

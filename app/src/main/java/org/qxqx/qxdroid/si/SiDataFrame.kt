@@ -1,4 +1,6 @@
-package org.qxqx.qxdroid
+package org.qxqx.qxdroid.si
+
+import org.qxqx.qxdroid.bytesToHex
 
 data class SiDataFrame(
     val command: Int,
