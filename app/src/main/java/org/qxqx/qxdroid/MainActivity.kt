@@ -9,7 +9,6 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -32,7 +31,6 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -70,7 +68,7 @@ class MainActivity : ComponentActivity() {
     private var portNum: Int = 0
     private lateinit var usbPermissionReceiver: BroadcastReceiver
     private var usbSerialPort: UsbSerialPort? = null
-    private val protocolLog = mutableStateListOf<String>()
+    private val readLog = mutableStateListOf<ReadActivity>()
     private val hexLog = mutableStateListOf<String>()
     private var connectionStatus by mutableStateOf("Disconnected")
 
@@ -125,26 +123,28 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             QxDroidTheme {
-                QxDroidApp(hexLog, protocolLog, connectionStatus, onClearLog = { clearLog() }, onBeep = { beep() })
+                QxDroidApp(hexLog, readLog, connectionStatus, onClearLog = { clearLog() }, onBeep = { beep() })
             }
         }
         handleIntent(intent)
     }
 
     private fun clearLog() {
-        protocolLog.clear()
+        readLog.clear()
         hexLog.clear()
     }
+
     private fun beep() {
         // doesn't work
         val frame = SiDataFrame(0xe0, byteArrayOf())
         serialPortManager.sendDataFrame(frame)
     }
+
     private fun logDataFrame(dataFrame: SiDataFrame) {
         runOnUiThread {
             val cmd = toSiRecCommand(dataFrame)
             if (cmd is SiCardDetected || cmd is SiCardRemoved) {
-                protocolLog.add(cmd.toString())
+                readLog.add(ReadActivity.Command(cmd))
             }
         }
     }
@@ -152,7 +152,7 @@ class MainActivity : ComponentActivity() {
     private fun logSiCard(card: SiCard) {
         //Log.d("MainActivity", "SI card read: ${card}.")
         runOnUiThread {
-            protocolLog.add(card.toString())
+            readLog.add(ReadActivity.CardRead(card))
         }
     }
 
@@ -246,7 +246,8 @@ class MainActivity : ComponentActivity() {
             val usbManager = getSystemService(USB_SERVICE) as UsbManager
             val prober = UsbSerialProber.getDefaultProber()
             for (device in usbManager.deviceList.values) {
-                val driver = prober.probeDevice(device) ?: if (device.vendorId == 0x10C4) Cp21xxSerialDriver(device) else null
+                val driver =
+                    prober.probeDevice(device) ?: if (device.vendorId == 0x10C4) Cp21xxSerialDriver(device) else null
                 if (driver != null) {
                     this.portNum = 0 // Connect to the first port
                     connect(device)
@@ -277,7 +278,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun QxDroidApp(
     hexData: List<String> = listOf("DEADBEEF"),
-    protocolData: List<String> = listOf("CMD: 80 | LEN: 2 | DATA: 0102 | CRC: 0304 (OK)"),
+    readActivityData: List<ReadActivity> = listOf(ReadActivity.Command(SiCardDetected(CardKind.CARD_5, 2u, 12345uL))),
     connectionStatus: String = "Preview",
     onClearLog: () -> Unit = {},
     onBeep: () -> Unit = {}
@@ -305,7 +306,7 @@ fun QxDroidApp(
             if (currentDestination == AppDestinations.HOME) {
                 var isHexPaneExpanded by rememberSaveable { mutableStateOf(false) }
                 val hexListState = rememberLazyListState()
-                val protocolListState = rememberLazyListState()
+                val readActivityDataState = rememberLazyListState()
                 val coroutineScope = rememberCoroutineScope()
 
                 LaunchedEffect(hexData.size) {
@@ -315,10 +316,10 @@ fun QxDroidApp(
                         }
                     }
                 }
-                LaunchedEffect(protocolData.size) {
-                    if (protocolData.isNotEmpty()) {
+                LaunchedEffect(readActivityData.size) {
+                    if (readActivityData.isNotEmpty()) {
                         coroutineScope.launch {
-                            protocolListState.animateScrollToItem(protocolData.size - 1)
+                            readActivityDataState.animateScrollToItem(readActivityData.size - 1)
                         }
                     }
                 }
@@ -335,7 +336,7 @@ fun QxDroidApp(
                                     connectionStatus.startsWith("Disconnected (") ||
                                     connectionStatus == "Permission denied" ||
                                     connectionStatus == "Disconnected"
-                             -> Color.Red
+                            -> Color.Red
                             else -> Color.Gray
                         }
                         Text(
@@ -355,9 +356,6 @@ fun QxDroidApp(
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        //Button(onClick = onBeep) {
-                        //    Text(text = "Beep")
-                        //}
                         OutlinedButton(onClick = onClearLog) {
                             Text(text = "Clear Log")
                         }
@@ -385,7 +383,11 @@ fun QxDroidApp(
                             }
                             HorizontalDivider()
                             if (isHexPaneExpanded) {
-                                DataLog(log = hexData, listState = hexListState)
+                                LazyColumn(state = hexListState) {
+                                    items(hexData) { line ->
+                                        Text(text = line, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+                                    }
+                                }
                             }
                         }
                         Column(
@@ -393,12 +395,12 @@ fun QxDroidApp(
                                 .weight(1f)
                         ) {
                             Text(
-                                "Parsed Protocol",
+                                "Card Activity",
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                             )
                             HorizontalDivider()
-                            DataLog(log = protocolData, listState = protocolListState)
+                            ReadActivityLog(log = readActivityData, listState = readActivityDataState)
                         }
                     }
                 }
@@ -417,14 +419,42 @@ enum class AppDestinations(
 }
 
 @Composable
-fun DataLog(
-    log: List<String>,
+fun ReadActivityLog(
+    log: List<ReadActivity>,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState()
 ) {
     LazyColumn(modifier = modifier, state = listState) {
-        items(log) { line ->
-            Text(text = line, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+        items(log) { activity ->
+            when (activity) {
+                is ReadActivity.CardRead -> {
+                    val card = activity.card
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Text(
+                                text = "Card ${card.cardNumber}",
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "(${card.cardKind})"
+                            )
+                        }
+                        Text(
+                            text = "Start: ${timeToString(card.startTime)}, Finish: ${timeToString(card.finishTime)}, Check: ${timeToString(card.checkTime)}"
+                        )
+                    }
+                }
+                is ReadActivity.Command -> {
+                    Text(
+                        text = activity.command.toString(),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                    )
+                }
+            }
         }
     }
 }
