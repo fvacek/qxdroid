@@ -17,12 +17,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -31,9 +33,9 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
@@ -58,9 +60,9 @@ import com.hoho.android.usbserial.driver.Cp21xxSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
+import java.io.IOException
 import kotlinx.coroutines.launch
 import org.qxqx.qxdroid.ui.theme.QxDroidTheme
-import java.io.IOException
 
 class MainActivity : ComponentActivity() {
 
@@ -384,8 +386,8 @@ fun QxDroidApp(
                             HorizontalDivider()
                             if (isHexPaneExpanded) {
                                 LazyColumn(state = hexListState) {
-                                    items(hexData) { line ->
-                                        Text(text = line, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+                                    items(hexData.size) { index ->
+                                        Text(text = hexData[index], modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
                                     }
                                 }
                             }
@@ -424,12 +426,27 @@ fun ReadActivityLog(
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState()
 ) {
+    var expandedItemIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+
     LazyColumn(modifier = modifier, state = listState) {
-        items(log) { activity ->
+        itemsIndexed(log) { index, activity ->
             when (activity) {
                 is ReadActivity.CardRead -> {
                     val card = activity.card
-                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
+                    val isExpanded = expandedItemIndex == index
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                expandedItemIndex = if (isExpanded) {
+                                    null // Collapse if already expanded
+                                } else {
+                                    index // Expand this item
+                                }
+                            }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -444,14 +461,24 @@ fun ReadActivityLog(
                             )
                         }
                         Text(
-                            text = "Start: ${timeToString(card.startTime)}, Finish: ${timeToString(card.finishTime)}, Check: ${timeToString(card.checkTime)}"
+                            text = "(${card.cardSerie}) | Start: ${timeToString(card.startTime)}, Finish: ${timeToString(card.finishTime)}, Check: ${timeToString(card.checkTime)}"
                         )
+
+                        if (isExpanded) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            card.punches.forEachIndexed { punchIndex, punch ->
+                                Text(
+                                    text = "${punchIndex + 1}. Code: ${punch.code}, Time: ${timeToString(punch.time)}",
+                                    modifier = Modifier.padding(start = 16.dp)
+                                )
+                            }
+                        }
                     }
                 }
                 is ReadActivity.Command -> {
                     Text(
                         text = activity.command.toString(),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
             }
