@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
     private var portNum: Int = 0
     private lateinit var usbPermissionReceiver: BroadcastReceiver
     private var usbSerialPort: UsbSerialPort? = null
-    private val readLog = mutableStateListOf<ReadActivity>()
+    private val readLog = mutableStateListOf<ReadOutObject>()
     private val hexLog = mutableStateListOf<String>()
     private var connectionStatus by mutableStateOf("Disconnected")
 
@@ -146,7 +146,7 @@ class MainActivity : ComponentActivity() {
         runOnUiThread {
             val cmd = toSiRecCommand(dataFrame)
             if (cmd is SiCardDetected || cmd is SiCardRemoved) {
-                readLog.add(ReadActivity.Command(cmd))
+                readLog.add(ReadOutObject.Command(cmd))
             }
         }
     }
@@ -154,7 +154,7 @@ class MainActivity : ComponentActivity() {
     private fun logSiCard(card: SiCard) {
         //Log.d("MainActivity", "SI card read: ${card}.")
         runOnUiThread {
-            readLog.add(ReadActivity.CardRead(card))
+            readLog.add(ReadOutObject.CardReadObject(card))
         }
     }
 
@@ -280,7 +280,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun QxDroidApp(
     hexData: List<String> = listOf("DEADBEEF"),
-    readActivityData: List<ReadActivity> = listOf(ReadActivity.Command(SiCardDetected(CardKind.CARD_5, 2u, 12345uL))),
+    readOutObjectData: List<ReadOutObject> = listOf(ReadOutObject.Command(SiCardDetected(CardKind.CARD_5, 2u, 12345uL))),
     connectionStatus: String = "Preview",
     onClearLog: () -> Unit = {},
     onBeep: () -> Unit = {}
@@ -318,10 +318,10 @@ fun QxDroidApp(
                         }
                     }
                 }
-                LaunchedEffect(readActivityData.size) {
-                    if (readActivityData.isNotEmpty()) {
+                LaunchedEffect(readOutObjectData.size) {
+                    if (readOutObjectData.isNotEmpty()) {
                         coroutineScope.launch {
-                            readActivityDataState.animateScrollToItem(readActivityData.size - 1)
+                            readActivityDataState.animateScrollToItem(readOutObjectData.size - 1)
                         }
                     }
                 }
@@ -397,12 +397,12 @@ fun QxDroidApp(
                                 .weight(1f)
                         ) {
                             Text(
-                                "Card Activity",
+                                "Card Readout",
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                             )
                             HorizontalDivider()
-                            ReadActivityLog(log = readActivityData, listState = readActivityDataState)
+                            ReadActivityLog(log = readOutObjectData, listState = readActivityDataState)
                         }
                     }
                 }
@@ -422,7 +422,7 @@ enum class AppDestinations(
 
 @Composable
 fun ReadActivityLog(
-    log: List<ReadActivity>,
+    log: List<ReadOutObject>,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState()
 ) {
@@ -430,57 +430,63 @@ fun ReadActivityLog(
 
     LazyColumn(modifier = modifier, state = listState) {
         itemsIndexed(log) { index, activity ->
-            when (activity) {
-                is ReadActivity.CardRead -> {
-                    val card = activity.card
-                    val isExpanded = expandedItemIndex == index
+            Column(
+                modifier = Modifier
+                    .background(if (index % 2 == 0) Color.Transparent else Color(0xFFF0F0F0))
+            ) {
+                when (activity) {
+                    is ReadOutObject.CardReadObject -> {
+                        val card = activity.card
+                        val isExpanded = expandedItemIndex == index
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                expandedItemIndex = if (isExpanded) {
-                                    null // Collapse if already expanded
-                                } else {
-                                    index // Expand this item
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    expandedItemIndex = if (isExpanded) {
+                                        null // Collapse if already expanded
+                                    } else {
+                                        index // Expand this item
+                                    }
                                 }
-                            }
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
-                            Text(
-                                text = "Card ${card.cardNumber}",
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "(${card.cardKind})"
-                            )
-                        }
-                        Text(
-                            text = "(${card.cardSerie}) | Start: ${timeToString(card.startTime)}, Finish: ${timeToString(card.finishTime)}, Check: ${timeToString(card.checkTime)}"
-                        )
-
-                        if (isExpanded) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            card.punches.forEachIndexed { punchIndex, punch ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
+                            ) {
                                 Text(
-                                    text = "${punchIndex + 1}. Code: ${punch.code}, Time: ${timeToString(punch.time)}",
-                                    modifier = Modifier.padding(start = 16.dp)
+                                    text = "Card ${card.cardNumber}",
+                                    fontWeight = FontWeight.Bold
                                 )
+                                Text(
+                                    text = "(${card.cardKind})"
+                                )
+                            }
+                            Text(
+                                text = "Start: ${timeToString(card.startTime)}, Finish: ${timeToString(card.finishTime)}, Check: ${timeToString(card.checkTime)}"
+                            )
+
+                            if (isExpanded) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                card.punches.forEachIndexed { punchIndex, punch ->
+                                    Text(
+                                        text = "${punchIndex + 1}. Code: ${punch.code}, Time: ${timeToString(punch.time)}",
+                                        modifier = Modifier.padding(start = 16.dp)
+                                    )
+                                }
                             }
                         }
                     }
+                    is ReadOutObject.Command -> {
+                        Text(
+                            text = activity.command.toString(),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                 }
-                is ReadActivity.Command -> {
-                    Text(
-                        text = activity.command.toString(),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                }
+                HorizontalDivider()
             }
         }
     }
