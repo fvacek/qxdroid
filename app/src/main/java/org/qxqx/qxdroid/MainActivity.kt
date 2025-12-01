@@ -9,6 +9,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -33,9 +34,11 @@ import androidx.compose.material.icons.filled.AppShortcut
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
@@ -52,15 +55,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
 
 import com.hoho.android.usbserial.driver.Cp21xxSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
+import kotlinx.coroutines.Dispatchers
 import java.io.IOException
 import kotlinx.coroutines.launch
 import org.qxqx.qxdroid.si.CardKind
@@ -72,6 +78,7 @@ import org.qxqx.qxdroid.si.SiCardRemoved
 import org.qxqx.qxdroid.si.SiDataFrame
 import org.qxqx.qxdroid.si.SiReader
 import org.qxqx.qxdroid.si.toSiRecCommand
+import org.qxqx.qxdroid.shv.Client
 import org.qxqx.qxdroid.ui.theme.QxDroidTheme
 
 class MainActivity : ComponentActivity() {
@@ -86,6 +93,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var siReader: SiReader
     private lateinit var serialPortManager: SerialPortManager
+    private lateinit var shvClient: Client
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,6 +117,8 @@ class MainActivity : ComponentActivity() {
                 }
             },
         )
+        
+        shvClient = Client()
 
         usbPermissionReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
@@ -135,7 +145,21 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             QxDroidTheme {
-                QxDroidApp(hexLog, readLog, connectionStatus, onClearLog = { clearLog() }, onBeep = { beep() })
+                QxDroidApp(
+                    hexLog, 
+                    readLog, 
+                    connectionStatus, 
+                    onClearLog = { clearLog() },
+                    onConnectShv = { url ->
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            try {
+                                shvClient.connect(url)
+                            } catch (e: Exception) {
+                                Log.e("MainActivity", "Connection error", e)
+                            }
+                        }
+                    }
+                )
             }
         }
         handleIntent(intent)
@@ -144,12 +168,6 @@ class MainActivity : ComponentActivity() {
     private fun clearLog() {
         readLog.clear()
         hexLog.clear()
-    }
-
-    private fun beep() {
-        // doesn't work
-        val frame = SiDataFrame(0xe0, byteArrayOf())
-        serialPortManager.sendDataFrame(frame)
     }
 
     private fun logDataFrame(dataFrame: SiDataFrame) {
@@ -300,9 +318,9 @@ fun QxDroidApp(
     )),
     connectionStatus: String = "Preview",
     onClearLog: () -> Unit = {},
-    onBeep: () -> Unit = {}
+    onConnectShv: (url: String) -> Unit = {}
 ) {
-    var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.SI_READER) }
+    var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.SHV_CLOUD) }
 
     NavigationSuiteScaffold(
         navigationSuiteItems = {
@@ -424,6 +442,45 @@ fun QxDroidApp(
                     }
                 }
             }
+            if (currentDestination == AppDestinations.SHV_CLOUD) {
+                CloudPane(modifier = Modifier.padding(innerPadding), onConnectShv = onConnectShv)
+            }
+        }
+    }
+}
+
+@Composable
+fun CloudPane(
+    modifier: Modifier = Modifier,
+    onConnectShv: (url: String) -> Unit
+) {
+    var host by rememberSaveable { mutableStateOf("127.0.0.1") }
+    var port by rememberSaveable { mutableStateOf("37888")
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OutlinedTextField(
+            value = host,
+            onValueChange = { host = it },
+            label = { Text("Host") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = port,
+            onValueChange = { port = it },
+            label = { Text("Port") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Button(
+            onClick = { onConnectShv("$host:$port") },
+            modifier = Modifier.align(Alignment.End)
+        ) {
+            Text("Connect")
         }
     }
 }
