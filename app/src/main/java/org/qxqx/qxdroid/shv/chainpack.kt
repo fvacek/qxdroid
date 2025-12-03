@@ -1,13 +1,13 @@
 package org.qxqx.qxdroid.shv
 
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 import java.util.TreeMap
-import kotlin.math.min
+import kotlin.collections.contentEquals
+import kotlin.collections.contentHashCode
 
 // ==========================================
 // Context Stubs (Simulating crate dependencies)
@@ -116,13 +116,34 @@ private fun makeError(reason: ReadErrorReason, msg: String): IOException {
 
 // Minimal RpcValue implementation to support the translation
 sealed class RpcValue {
-    class Null : RpcValue()
+    class Null : RpcValue() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+            return true
+        }
+        override fun hashCode(): kotlin.Int {
+            return javaClass.hashCode()
+        }
+    }
     data class Bool(val value: Boolean) : RpcValue()
     data class Int(val value: Long) : RpcValue()
     data class UInt(val value: ULong) : RpcValue()
     data class Double(val value: kotlin.Double) : RpcValue()
     data class String(val value: kotlin.String) : RpcValue()
-    data class Blob(val value: ByteArray) : RpcValue()
+    data class Blob(val value: ByteArray) : RpcValue() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+            other as Blob
+            if (!value.contentEquals(other.value)) return false
+            return true
+        }
+
+        override fun hashCode(): kotlin.Int {
+            return value.contentHashCode()
+        }
+    }
     data class List(val value: kotlin.collections.List<RpcValue>) : RpcValue()
     data class Map(val value: kotlin.collections.Map<kotlin.String, RpcValue>) : RpcValue()
     data class IMap(val value: kotlin.collections.Map<kotlin.Int, RpcValue>) : RpcValue()

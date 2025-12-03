@@ -1,9 +1,32 @@
 package org.qxqx.qxdroid.shv
 
+import android.R
 import org.junit.Test
 import org.junit.Assert.*
+import org.qxqx.qxdroid.bytesFromHex
+import org.qxqx.qxdroid.bytesToHex
 import java.io.ByteArrayOutputStream
 import java.io.ByteArrayInputStream
+
+private fun chainPackToRpcValue(hex_data: String): RpcValue {
+    val buff = bytesFromHex(hex_data);
+    val input = ByteArrayInputStream(buff)
+    val reader = ChainPackReader(input)
+    val readValue = reader.read()
+    return readValue
+}
+
+private fun rpcValueToChainPack(value: RpcValue): String {
+    val out = ByteArrayOutputStream()
+    val writer = ChainPackWriter(out)
+    writer.write(value)
+    return bytesToHex(out.toByteArray())
+}
+
+private fun testReadWriteTwist(value: RpcValue, hexChainpack: String) {
+    assertEquals(hexChainpack, rpcValueToChainPack(value))
+    assertEquals(value, chainPackToRpcValue(hexChainpack))
+}
 
 class ChainPackTest {
     @Test
@@ -93,5 +116,34 @@ class ChainPackTest {
             assertEquals(1, ba.size)
             assertEquals(i, ba[0].toInt() - 64)
         }
+    }
+
+    @Test
+    fun testString() {
+        testReadWriteTwist(RpcValue.String("AHOJ!"), "860541484F4A21")
+    }
+
+    @Test
+    fun testBool() {
+        testReadWriteTwist(RpcValue.Bool(true), "FE")
+        testReadWriteTwist(RpcValue.Bool(false), "FD")
+    }
+
+    @Test
+    fun testBlob() {
+        val blob = ByteArray(10) { 0xAA.toByte() }
+        testReadWriteTwist(RpcValue.Blob(blob), "850AAAAAAAAAAAAAAAAAAAAA")
+    }
+
+    @Test
+    fun testList() {
+        val list = RpcValue.List(listOf(
+            RpcValue.String("a"),
+            RpcValue.Int(123),
+            RpcValue.Bool(true),
+            RpcValue.List(listOf(RpcValue.Int(1), RpcValue.Int(2), RpcValue.Int(3))),
+            RpcValue.Null()
+        ))
+        testReadWriteTwist(list, "8886016182807BFE88414243FF80FF")
     }
 }
