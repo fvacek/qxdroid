@@ -55,7 +55,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
@@ -78,7 +77,7 @@ import org.qxqx.qxdroid.si.SiCardRemoved
 import org.qxqx.qxdroid.si.SiDataFrame
 import org.qxqx.qxdroid.si.SiReader
 import org.qxqx.qxdroid.si.toSiRecCommand
-import org.qxqx.qxdroid.shv.Client
+import org.qxqx.qxdroid.shv.ShvClient
 import org.qxqx.qxdroid.ui.theme.QxDroidTheme
 
 class MainActivity : ComponentActivity() {
@@ -93,7 +92,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var siReader: SiReader
     private lateinit var serialPortManager: SerialPortManager
-    private lateinit var shvClient: Client
+    private lateinit var shvClient: ShvClient
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -118,7 +117,7 @@ class MainActivity : ComponentActivity() {
             },
         )
         
-        shvClient = Client()
+        shvClient = ShvClient(lifecycleScope)
 
         usbPermissionReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
