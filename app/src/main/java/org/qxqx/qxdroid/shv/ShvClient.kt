@@ -1,18 +1,23 @@
 package org.qxqx.qxdroid.shv
 
 import android.util.Log
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.qxqx.qxdroid.bytesToHex
+import org.qxqx.qxdroid.shv.getFrameBytes
+import org.qxqx.qxdroid.shv.Protocol
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -22,20 +27,23 @@ import java.security.MessageDigest
 
 private const val TAG = "ShvClient"
 
+class RpcException(message: String) : Exception(message)
+
 private fun sha1(input: String): String {
     val digest = MessageDigest.getInstance("SHA-1")
     val hash = digest.digest(input.toByteArray())
     return hash.joinToString("") { "%02x".format(it) }
 }
 
-class ShvClient(private val scope: CoroutineScope) {
+class ShvClient {
 
     private var socket: Socket? = null
     private var writer: DataOutputStream? = null
     private var reader: DataInputStream? = null
 
-    // Use SharedFlow to emit incoming messages to collectors
-    private val _messageFlow = MutableSharedFlow<RpcMessage>()
+    private val clientScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    private val _messageFlow = MutableSharedFlow<RpcMessage>(replay = 10)
     val messageFlow: SharedFlow<RpcMessage> = _messageFlow.asSharedFlow()
 
     suspend fun connect(url: String) {
@@ -50,49 +58,59 @@ class ShvClient(private val scope: CoroutineScope) {
                 writer = DataOutputStream(socket?.getOutputStream())
                 reader = DataInputStream(socket?.getInputStream())
 
-                // Start a coroutine to listen for incoming messages
-                scope.launch {
-                    listenForMessages()
+                val listenerReady = CompletableDeferred<Unit>()
+                clientScope.launch {
+                    listenForMessages(listenerReady)
                 }
+                listenerReady.await()
 
                 val rqid1 = sendHello()
                 val res = receiveResponse(rqid1).resultE()
-                val nonce = res.toMap()?.get("nonce")?.toString() ?: throw IllegalArgumentException("Invalid response, nonce is null")
+                val nonce = res.toMap()?.get("nonce")?.toString()
+                    ?: throw RpcException("Invalid response, nonce is null")
 
                 val rqid2 = sendLogin(nonce)
                 receiveResponse(rqid2).resultE()
+                Log.i(TAG, "Login to shv broker was successful")
 
-            } catch (e: IOException) {
-                Log.e(TAG, "Could not connect to server: $e")
+            } catch (e: Exception) {
+                Log.e(TAG, "Connection error", e)
                 close()
+                throw e
             }
         }
     }
 
     fun sendHello(): Long {
         val msg = RpcRequest("", "hello")
-        val rqid = msg.requestId()?: 0L
+        val rqid = msg.requestId() ?: 0L
         sendMessage(msg)
         return rqid
     }
+
     fun sendLogin(nonce: String): Long {
-        // {"login":{"password":"0471b43505462fcfc4208aee533bd9f785058b13","type":"SHA1","user":"test"},"options":{"idleWatchDogTimeOut":180}}
         val user = "test"
         val password = "test"
         val sha1pwd = sha1(nonce + sha1(password))
-        val param = RpcValue.Map(mapOf(
-            "login" to RpcValue.Map(mapOf(
-                "password" to RpcValue.String(sha1pwd),
-                "type" to RpcValue.String("SHA1"),
-                "user" to RpcValue.String(user),
-            )),
-            "options" to RpcValue.Map(mapOf(
-                "idleWatchDogTimeOut" to RpcValue.Int(180),
-            )),
-        ))
+        val param = RpcValue.Map(
+            mapOf(
+                "login" to RpcValue.Map(
+                    mapOf(
+                        "password" to RpcValue.String(sha1pwd),
+                        "type" to RpcValue.String("SHA1"),
+                        "user" to RpcValue.String(user),
+                    )
+                ),
+                "options" to RpcValue.Map(
+                    mapOf(
+                        "idleWatchDogTimeOut" to RpcValue.Int(180),
+                    )
+                ),
+            )
+        )
 
         val msg = RpcRequest("", "login", param)
-        val rqid = msg.requestId()?: 0L
+        val rqid = msg.requestId() ?: 0L
         sendMessage(msg)
         return rqid
     }
@@ -110,12 +128,24 @@ class ShvClient(private val scope: CoroutineScope) {
     }
 
     private suspend fun receiveResponse(request_id: Long): RpcResponse {
-        val resp = withTimeout(5000) {
+        Log.d(TAG, "Waiting for response for request: $request_id")
+        val msg = withTimeout(5000) {
             messageFlow
-                .filterIsInstance<RpcResponse>()
-                .first { it.requestId() == request_id }
+                .onEach { m: RpcMessage -> Log.d(TAG, "Message in flow: $m") }
+                .first { m: RpcMessage -> m.requestId() == request_id }
         }
-        return resp
+
+        Log.d(TAG, "Found message for rqid $request_id: $msg")
+
+        if (msg !is RpcResponse) {
+            throw RpcException("Unexpected message type received for request $request_id: ${msg.javaClass.simpleName}")
+        }
+
+        val err = msg.error()
+        if (err != null) {
+            throw RpcException("RPC error for request $request_id: ${err.message()}")
+        }
+        return msg
     }
 
     fun sendMessage(msg: RpcMessage) {
@@ -127,29 +157,34 @@ class ShvClient(private val scope: CoroutineScope) {
         sendData(data)
     }
 
-    private suspend fun listenForMessages() {
-        withContext(Dispatchers.IO) {
-            try {
-                while (isActive && reader != null) {
+    private suspend fun listenForMessages(listenerReady: CompletableDeferred<Unit>) {
+        listenerReady.complete(Unit)
+        try {
+            while (clientScope.isActive && reader != null) {
+                try {
                     val frameData = getFrameBytes(reader!!)
                     Log.d(TAG, "Frame received: ${bytesToHex(frameData)}")
                     val msg = RpcMessage.fromData(frameData)
-                    _messageFlow.tryEmit(msg)
+                    val emitted = _messageFlow.tryEmit(msg)
+                    Log.d(TAG, "Emitting message: $msg. Success: $emitted")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error processing frame, skipping.", e)
                 }
-            } catch (e: IOException) {
-                Log.e(TAG, "Lost connection to server: $e")
-                close()
-            } catch (e: ReceiveFrameError) {
-                Log.e(TAG, "Error while receiving frame: $e.")
-            } finally {
-                close()
             }
+        } finally {
+            Log.i(TAG, "Message listener stopped.")
         }
     }
 
     fun close() {
-        writer?.close()
-        reader?.close()
-        socket?.close()
+        Log.i(TAG, "Closing connection.")
+        clientScope.cancel()
+        try {
+            writer?.close()
+            reader?.close()
+            socket?.close()
+        } catch (e: IOException) {
+            Log.w(TAG, "Error closing socket resources", e)
+        }
     }
 }
