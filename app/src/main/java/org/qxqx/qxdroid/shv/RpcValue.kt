@@ -62,6 +62,32 @@ sealed class RpcValue {
         return ba.toByteArray()
     }
 
+    fun toInt(): Long? {
+        return when (this) {
+            is Int -> value
+            is UInt -> value.toLong()
+            else -> null
+        }
+    }
+    fun toList(): kotlin.collections.List<RpcValue>? {
+        return when (this) {
+            is List -> value
+            else -> null
+        }
+    }
+    fun toMap(): kotlin.collections.Map<kotlin.String, RpcValue>? {
+        return when (this) {
+            is Map -> value
+            else -> null
+        }
+    }
+    fun toIMap(): kotlin.collections.Map<kotlin.Int, RpcValue>? {
+        return when (this) {
+            is IMap -> value
+            else -> null
+        }
+    }
+
     companion object {
         fun fromChainPack(data: ByteArray): RpcValue {
             val reader = ChainPackReader(ByteArrayInputStream(data))
@@ -79,6 +105,8 @@ class MetaMap {
         data class Int(val i: kotlin.Int) : MetaKey()
     }
 
+    fun get(key: kotlin.String): RpcValue? = map.get(MetaKey.Str(key))
+    fun get(key: kotlin.Int): RpcValue? = map.get(MetaKey.Int(key))
     fun insert(key: kotlin.String, value: RpcValue) = map.put(MetaKey.Str(key), value)
     fun insert(key: kotlin.Int, value: RpcValue) = map.put(MetaKey.Int(key), value)
     fun remove(key: kotlin.String) = map.remove(MetaKey.Str(key))

@@ -8,15 +8,25 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.qxqx.qxdroid.bytesToHex
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
 import java.net.Socket
+import java.security.MessageDigest
 
 private const val TAG = "ShvClient"
+
+private fun sha1(input: String): String {
+    val digest = MessageDigest.getInstance("SHA-1")
+    val hash = digest.digest(input.toByteArray())
+    return hash.joinToString("") { "%02x".format(it) }
+}
 
 class ShvClient(private val scope: CoroutineScope) {
 
@@ -40,12 +50,18 @@ class ShvClient(private val scope: CoroutineScope) {
                 writer = DataOutputStream(socket?.getOutputStream())
                 reader = DataInputStream(socket?.getInputStream())
 
-                sendHello()
-
                 // Start a coroutine to listen for incoming messages
                 scope.launch {
                     listenForMessages()
                 }
+
+                val rqid1 = sendHello()
+                val res = receiveResponse(rqid1).resultE()
+                val nonce = res.toMap()?.get("nonce")?.toString() ?: throw IllegalArgumentException("Invalid response, nonce is null")
+
+                val rqid2 = sendLogin(nonce)
+                receiveResponse(rqid2).resultE()
+
             } catch (e: IOException) {
                 Log.e(TAG, "Could not connect to server: $e")
                 close()
@@ -53,9 +69,32 @@ class ShvClient(private val scope: CoroutineScope) {
         }
     }
 
-    fun sendHello() {
+    fun sendHello(): Long {
         val msg = RpcRequest("", "hello")
+        val rqid = msg.requestId()?: 0L
         sendMessage(msg)
+        return rqid
+    }
+    fun sendLogin(nonce: String): Long {
+        // {"login":{"password":"0471b43505462fcfc4208aee533bd9f785058b13","type":"SHA1","user":"test"},"options":{"idleWatchDogTimeOut":180}}
+        val user = "test"
+        val password = "test"
+        val sha1pwd = sha1(nonce + sha1(password))
+        val param = RpcValue.Map(mapOf(
+            "login" to RpcValue.Map(mapOf(
+                "password" to RpcValue.String(sha1pwd),
+                "type" to RpcValue.String("SHA1"),
+                "user" to RpcValue.String(user),
+            )),
+            "options" to RpcValue.Map(mapOf(
+                "idleWatchDogTimeOut" to RpcValue.Int(180),
+            )),
+        ))
+
+        val msg = RpcRequest("", "login", param)
+        val rqid = msg.requestId()?: 0L
+        sendMessage(msg)
+        return rqid
     }
 
     private fun sendData(data: ByteArray) {
@@ -68,6 +107,15 @@ class ShvClient(private val scope: CoroutineScope) {
                 close()
             }
         }
+    }
+
+    private suspend fun receiveResponse(request_id: Long): RpcResponse {
+        val resp = withTimeout(5000) {
+            messageFlow
+                .filterIsInstance<RpcResponse>()
+                .first { it.requestId() == request_id }
+        }
+        return resp
     }
 
     fun sendMessage(msg: RpcMessage) {

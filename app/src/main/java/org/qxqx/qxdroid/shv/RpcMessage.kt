@@ -1,6 +1,7 @@
 package org.qxqx.qxdroid.shv
 
 import java.io.ByteArrayInputStream
+import java.security.InvalidParameterException
 
 enum class Tag(val value: Int) {
     RequestId(8),
@@ -57,43 +58,40 @@ open class RpcMessage(
         return value.meta!!
     }
 
-    fun setRequestId(id: ULong): RpcMessage {
-        val mm = checkMeta()
-        mm.insert(Tag.RequestId.value, RpcValue.UInt(id))
-        value.meta = mm
-        return this
-    }
+    fun requestId(): Long? = getTag(Tag.RequestId)?.toInt()
+    fun setRequestId(id: Long) = setTag(Tag.RequestId, RpcValue.Int(id))
 
-    fun setShvPath(shvPath: String): RpcMessage {
-        val mm = checkMeta()
-        mm.insert(Tag.ShvPath.value, RpcValue.String(shvPath))
-        value.meta = mm
-        return this
-    }
+    fun shvPath(): String? = getTag(Tag.ShvPath)?.toString()
+    fun setShvPath(shvPath: String) = setTag(Tag.ShvPath, RpcValue.String(shvPath))
 
-    fun setMethod(method: String): RpcMessage {
-        val mm = checkMeta()
-        mm.insert(Tag.Method.value, RpcValue.String(method))
-        value.meta = mm
-        return this
-    }
+    fun method(): String? = getTag(Tag.Method)?.toString()
+    fun setMethod(method: String) = setTag(Tag.Method, RpcValue.String(method))
 
-    fun setParam(param: RpcValue?): RpcMessage = apply {
+    fun setParam(param: RpcValue?) = apply {
         val map = (value as? RpcValue.IMap)?.value ?: throw IllegalStateException("RpcMessage value is not an IMap")
         if (map is MutableMap) {
             map[Key.Params.value] = param ?: RpcValue.Null()
         }
     }
 
-    fun setUserId(userId: String?): RpcMessage {
+    fun userId(): String? = getTag(Tag.UserId)?.toString()
+    fun setUserId(userId: String?) = setTag(Tag.UserId, userId?.let { RpcValue.String(it) })
+
+    fun callerIds(): RpcValue? = getTag(Tag.CallerIds)
+    fun setCallerIds(callerIds: RpcValue?) = setTag(Tag.CallerIds, callerIds)
+
+
+    fun getTag(tag: Tag): RpcValue? {
         val mm = checkMeta()
-        if (userId == null) {
-            mm.remove(Tag.UserId.value)
+        return mm.get(tag.value)
+    }
+    fun setTag(tag: Tag, value: RpcValue?) {
+        val mm = checkMeta()
+        if (value == null) {
+            mm.remove(tag.value)
         } else {
-            mm.insert(Tag.UserId.value, RpcValue.String(userId))
+            mm.insert(tag.value, value)
         }
-        value.meta = mm
-        return this
     }
 }
 
@@ -109,7 +107,7 @@ class RpcRequest(
     val param: RpcValue? = null,
     val userId: String? = null,
 ) : RpcMessage(run {
-    requestId += 1UL
+    requestId += 1L
     val msg = RpcMessage()
     msg.setRequestId(requestId)
     msg.setShvPath(path)
@@ -118,6 +116,63 @@ class RpcRequest(
     msg.value
 }) {
     companion object {
-        private var requestId: ULong = 0UL
+        private var requestId: Long = 0L
     }
 }
+
+class RpcResponse() : RpcMessage() {
+    enum class ErrorCode(val value: Int) {
+        NoError(0),
+        InvalidRequest(1),	// The data sent is not a valid Request object.
+        MethodNotFound(2),	// The method does not exist / is not available.
+        InvalidParam(3),		// Invalid method parameter(s).
+        InternalError(4),		// Internal RPC error.
+        ParseError(5),		// Invalid JSON was received by the server. An error occurred on the server while parsing the JSON text.
+        MethodCallTimeout(6),
+        MethodCallCancelled(7),
+        MethodCallException(8),
+        PermissionDenied(9),
+        LoginRequired(10),
+        UserIDRequired(11),
+        NotImplemented(12),
+        TryAgainLater(13),
+        AbortRequestInvalid(14),
+    }
+    private enum class ErrorKey(val value: Int) { Code(1), Message(2) }
+
+    class RpcError(val code: ErrorCode, val message: String)
+
+    companion object {
+        fun fromRequest(request: RpcRequest): RpcResponse {
+            val msg = RpcResponse()
+            msg.setRequestId(
+                request.requestId() ?: throw IllegalArgumentException("Request ID is missing")
+            )
+            msg.setCallerIds(request.callerIds())
+            return msg
+        }
+    }
+
+    fun result(): RpcValue? {
+        return value.toIMap()?.get(Key.Result.value)
+    }
+
+    fun resultE(): RpcValue {
+        val result = result()
+        if (result == null) {
+            val err = error()?: throw RuntimeException("Result is invalid")
+            throw RuntimeException("RPC call error: ${err.code} ${err.message}")
+        }
+        return result
+    }
+
+    fun error(): RpcError? {
+        val errmap = value.toIMap()?.get(Key.Error.value)?.toIMap() ?: return null
+        val code = errmap.get(ErrorKey.Code.value)?.toInt()?.toInt()
+        val message = errmap.get(ErrorKey.Message.value)?.toString()
+        return RpcError(ErrorCode.entries[code?: 0], message?: "Unknown error")
+    }
+}
+
+
+
