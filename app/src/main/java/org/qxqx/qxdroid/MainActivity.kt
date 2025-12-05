@@ -453,8 +453,8 @@ fun CloudPane(
     modifier: Modifier = Modifier,
     onConnectShv: (url: String) -> Unit
 ) {
-    var host by rememberSaveable { mutableStateOf("127.0.0.1") }
-    var port by rememberSaveable { mutableStateOf("37888")
+    var host by rememberSaveable { mutableStateOf("10.0.2.2") }
+    var port by rememberSaveable { mutableStateOf("3755")
     }
 
     Column(

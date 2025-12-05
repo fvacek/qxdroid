@@ -1,5 +1,8 @@
 package org.qxqx.qxdroid.shv
 
+import android.util.Log
+import org.qxqx.qxdroid.bytesToHex
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -12,6 +15,7 @@ import kotlin.collections.contentHashCode
 // ==========================================
 // Context Stubs (Simulating crate dependencies)
 // ==========================================
+private const val CAHINPACK_READER = "ChainPackReader"
 
 const val SHV_EPOCH_MSEC: Long = 1517529600000
 
@@ -39,7 +43,9 @@ class ByteReader(private val input: InputStream) {
 
     fun peekUByte(): UByte {
         if (peekedByte == null) {
-            peekedByte = input.read()
+            val b2 = input.read()
+            //Log.d(CAHINPACK_READER, "Byte received: ${bytesToHex(byteArrayOf(b2.toByte()))}")
+            peekedByte = b2
         }
         if (peekedByte == -1) throw makeError(ReadErrorReason.UnexpectedEndOfStream, "Unexpected EOF")
         return peekedByte!!.toUByte()
@@ -47,11 +53,13 @@ class ByteReader(private val input: InputStream) {
 
     fun getUByte(): UByte {
         val b = if (peekedByte != null) {
-            val ret = peekedByte!!
+            val b2 = peekedByte!!
             peekedByte = null
-            ret
+            b2
         } else {
-            input.read()
+            val b2 = input.read()
+            //Log.d(CAHINPACK_READER, "Byte received: ${bytesToHex(byteArrayOf(b2.toByte()))}")
+            b2
         }
         if (b == -1) throw makeError(ReadErrorReason.UnexpectedEndOfStream, "Unexpected EOF")
         pos++
@@ -152,6 +160,20 @@ sealed class RpcValue {
 
     // MetaData holder (simplified)
     var meta: MetaMap? = null
+
+    fun toChainPack(): ByteArray {
+        val ba = ByteArrayOutputStream()
+        val writer = ChainPackWriter(ba)
+        writer.write(this)
+        return ba.toByteArray()
+    }
+
+    companion object {
+        fun fromChainPack(data: ByteArray): RpcValue {
+            val reader = ChainPackReader(ByteArrayInputStream(data))
+            return reader.read()
+        }
+    }
 }
 
 // Minimal MetaMap
@@ -165,6 +187,8 @@ class MetaMap {
 
     fun insert(key: kotlin.String, value: RpcValue) = map.put(MetaKey.Str(key), value)
     fun insert(key: kotlin.Int, value: RpcValue) = map.put(MetaKey.Int(key), value)
+    fun remove(key: kotlin.String) = map.remove(MetaKey.Str(key))
+    fun remove(key: kotlin.Int) = map.remove(MetaKey.Int(key))
 }
 
 // ==========================================

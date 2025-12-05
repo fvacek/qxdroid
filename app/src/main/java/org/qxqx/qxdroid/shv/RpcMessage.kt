@@ -27,10 +27,15 @@ enum class Key(val value: Int) {
     Abort(5);
 }
 
-class RpcMessage(
+open class RpcMessage(
     val value: RpcValue
 ) {
+    init {
+        require(value is RpcValue.IMap) { "RpcMessage value must be an RpcValue.IMap" }
+    }
+
     constructor() : this(newValue())
+
     companion object {
         fun fromData(data: ByteArray): RpcMessage {
             val reader = ChainPackReader(ByteArrayInputStream(data))
@@ -45,12 +50,48 @@ class RpcMessage(
         }
     }
 
-    fun setShvPath(shvPath: String): RpcMessage {
-        var mm = value.meta
-        if (mm == null) {
-            mm = createMeta()
+    private fun checkMeta(): MetaMap {
+        if (value.meta == null) {
+            value.meta = createMeta()
         }
+        return value.meta!!
+    }
+
+    fun setRequestId(id: ULong): RpcMessage {
+        val mm = checkMeta()
+        mm.insert(Tag.RequestId.value, RpcValue.UInt(id))
+        value.meta = mm
+        return this
+    }
+
+    fun setShvPath(shvPath: String): RpcMessage {
+        val mm = checkMeta()
         mm.insert(Tag.ShvPath.value, RpcValue.String(shvPath))
+        value.meta = mm
+        return this
+    }
+
+    fun setMethod(method: String): RpcMessage {
+        val mm = checkMeta()
+        mm.insert(Tag.Method.value, RpcValue.String(method))
+        value.meta = mm
+        return this
+    }
+
+    fun setParam(param: RpcValue?): RpcMessage = apply {
+        val map = (value as? RpcValue.IMap)?.value ?: throw IllegalStateException("RpcMessage value is not an IMap")
+        if (map is MutableMap) {
+            map[Key.Params.value] = param ?: RpcValue.Null()
+        }
+    }
+
+    fun setUserId(userId: String?): RpcMessage {
+        val mm = checkMeta()
+        if (userId == null) {
+            mm.remove(Tag.UserId.value)
+        } else {
+            mm.insert(Tag.UserId.value, RpcValue.String(userId))
+        }
         value.meta = mm
         return this
     }
@@ -60,4 +101,23 @@ private fun createMeta(): MetaMap {
     val mm = MetaMap()
     mm.insert(1, RpcValue.Int(1))
     return mm
+}
+
+class RpcRequest(
+    val path: String,
+    val method: String,
+    val param: RpcValue? = null,
+    val userId: String? = null,
+) : RpcMessage(run {
+    requestId += 1UL
+    val msg = RpcMessage()
+    msg.setRequestId(requestId)
+    msg.setShvPath(path)
+    msg.setMethod(method)
+    msg.setParam(param)
+    msg.value
+}) {
+    companion object {
+        private var requestId: ULong = 0UL
+    }
 }

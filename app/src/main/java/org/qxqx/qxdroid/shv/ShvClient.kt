@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.qxqx.qxdroid.bytesToHex
+import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
@@ -33,9 +35,12 @@ class ShvClient(private val scope: CoroutineScope) {
                 val host = parts[0]
                 val port = parts.getOrNull(1)?.toIntOrNull() ?: 80
 
+                Log.i(TAG, "Connecting to shv broker: $host:$port")
                 socket = Socket(host, port)
                 writer = DataOutputStream(socket?.getOutputStream())
                 reader = DataInputStream(socket?.getInputStream())
+
+                sendHello()
 
                 // Start a coroutine to listen for incoming messages
                 scope.launch {
@@ -46,6 +51,11 @@ class ShvClient(private val scope: CoroutineScope) {
                 close()
             }
         }
+    }
+
+    fun sendHello() {
+        val msg = RpcRequest("", "hello")
+        sendMessage(msg)
     }
 
     private fun sendData(data: ByteArray) {
@@ -60,27 +70,29 @@ class ShvClient(private val scope: CoroutineScope) {
         }
     }
 
+    fun sendMessage(msg: RpcMessage) {
+        val data = msg.value.toChainPack()
+        val ba = ByteArrayOutputStream()
+        val writer = ChainPackWriter(ba)
+        writer.writeUintData((data.size + 1).toULong())
+        sendData(ba.toByteArray() + byteArrayOf(Protocol.CHAIN_PACK.toByte()))
+        sendData(data)
+    }
+
     private suspend fun listenForMessages() {
         withContext(Dispatchers.IO) {
             try {
                 while (isActive && reader != null) {
-                    val frame_data = getFrameBytes(reader!!)
-                    val msg = RpcMessage.fromData(frame_data)
+                    val frameData = getFrameBytes(reader!!)
+                    Log.d(TAG, "Frame received: ${bytesToHex(frameData)}")
+                    val msg = RpcMessage.fromData(frameData)
                     _messageFlow.tryEmit(msg)
-
-                    //val buffer = ByteArray(1024) // buffer size
-                    //val bytesRead = reader?.read(buffer)
-                    //if (bytesRead == -1 || bytesRead == null) {
-                    //    // Server closed the connection
-                    //    _messageFlow.tryEmit("Server disconnected.")
-                    //    break
-                    //} else {
-                    //    val data = buffer.copyOf(bytesRead)
-                    //    println("Read ${data.size} bytes: ${data.joinToString()}")
-                    //}
                 }
             } catch (e: IOException) {
-                Log.e(TAG, "Lost connection to server.")
+                Log.e(TAG, "Lost connection to server: $e")
+                close()
+            } catch (e: ReceiveFrameError) {
+                Log.e(TAG, "Error while receiving frame: $e.")
             } finally {
                 close()
             }
