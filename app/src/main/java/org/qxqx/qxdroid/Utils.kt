@@ -1,5 +1,7 @@
 package org.qxqx.qxdroid
 
+import java.security.MessageDigest
+
 // This function is now available anywhere in the project
 fun bytesToHex(bytes: ByteArray): String {
     return bytes.joinToString("") { "%02x".format(it).uppercase() }
@@ -22,5 +24,11 @@ fun timeToString(time: Int): String {
     val min = (time / 60) % 60
     val hour = (time / 3600) % 24
     return "%02d:%02d:%02d".format(hour, min, sec)
+}
+
+fun sha1(input: String): String {
+    val digest = MessageDigest.getInstance("SHA-1")
+    val hash = digest.digest(input.toByteArray())
+    return hash.joinToString("") { "%02x".format(it) }
 }
 

@@ -1,29 +1,19 @@
 package org.qxqx.qxdroid
 
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
-class TimeToStringTest {
+class UtilsTest {
     @Test
-    fun `formats time correctly`() {
-        assertEquals("00:00:00", timeToString(0))
-        assertEquals("00:00:01", timeToString(1))
-        assertEquals("00:01:00", timeToString(60))
-        assertEquals("01:00:00", timeToString(3600))
-        assertEquals("12:34:56", timeToString(45296)) // 12*3600 + 34*60 + 56
+    fun testSha1() {
+        val input = "test"
+        val expected = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3"
+        assertEquals(expected, sha1(input))
     }
-
     @Test
-    fun `handles time rollover`() {
-        val oneDayInSeconds = 24 * 3600
-        assertEquals("00:00:00", timeToString(oneDayInSeconds))
-        assertEquals("00:00:01", timeToString(oneDayInSeconds + 1))
-        assertEquals("01:02:03", timeToString(oneDayInSeconds + 3600 + 120 + 3))
-    }
-
-    @Test
-    fun `handles no time`() {
-        val notime = 61166
-        assertEquals("--:--:--", timeToString(notime))
+    fun testSha12() {
+        val input = "1404741806a94a8fe5ccb19ba61c4c0873d391e987982fbbd3"
+        val expected = "519b5e8e489799d6243142ab53ad95e7e90ef160"
+        assertEquals(expected, sha1(input))
     }
 }

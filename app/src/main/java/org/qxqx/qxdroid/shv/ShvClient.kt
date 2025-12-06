@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.qxqx.qxdroid.bytesToHex
+import org.qxqx.qxdroid.sha1
 import org.qxqx.qxdroid.shv.getFrameBytes
 import org.qxqx.qxdroid.shv.Protocol
 import java.io.ByteArrayOutputStream
@@ -28,12 +29,6 @@ import java.security.MessageDigest
 private const val TAG = "ShvClient"
 
 class RpcException(message: String) : Exception(message)
-
-private fun sha1(input: String): String {
-    val digest = MessageDigest.getInstance("SHA-1")
-    val hash = digest.digest(input.toByteArray())
-    return hash.joinToString("") { "%02x".format(it) }
-}
 
 class ShvClient {
 
@@ -55,19 +50,18 @@ class ShvClient {
 
                 Log.i(TAG, "Connecting to shv broker: $host:$port")
                 socket = Socket(host, port)
+                Log.i(TAG, "Connected OK")
                 writer = DataOutputStream(socket?.getOutputStream())
                 reader = DataInputStream(socket?.getInputStream())
 
-                val listenerReady = CompletableDeferred<Unit>()
                 clientScope.launch {
-                    listenForMessages(listenerReady)
+                    listenForMessages()
                 }
-                listenerReady.await()
 
                 val rqid1 = sendHello()
                 val res = receiveResponse(rqid1).resultE()
-                val nonce = res.toMap()?.get("nonce")?.toString()
-                    ?: throw RpcException("Invalid response, nonce is null")
+                val nonce = res.toMap()?.get("nonce")?.asString()
+                    ?: throw RpcException("Invalid response, invalid nonce")
 
                 val rqid2 = sendLogin(nonce)
                 receiveResponse(rqid2).resultE()
@@ -92,6 +86,7 @@ class ShvClient {
         val user = "test"
         val password = "test"
         val sha1pwd = sha1(nonce + sha1(password))
+
         val param = RpcValue.Map(
             mapOf(
                 "login" to RpcValue.Map(
@@ -143,7 +138,7 @@ class ShvClient {
 
         val err = msg.error()
         if (err != null) {
-            throw RpcException("RPC error for request $request_id: ${err.message()}")
+            throw RpcException("RPC error for request $request_id: ${err.message}")
         }
         return msg
     }
@@ -157,8 +152,7 @@ class ShvClient {
         sendData(data)
     }
 
-    private suspend fun listenForMessages(listenerReady: CompletableDeferred<Unit>) {
-        listenerReady.complete(Unit)
+    private suspend fun listenForMessages() {
         try {
             while (clientScope.isActive && reader != null) {
                 try {

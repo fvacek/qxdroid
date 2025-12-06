@@ -117,7 +117,7 @@ class MainActivity : ComponentActivity() {
             },
         )
         
-        shvClient = ShvClient(lifecycleScope)
+        shvClient = ShvClient()
 
         usbPermissionReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
@@ -572,3 +572,4 @@ fun QxDroidAppPreview() {
         QxDroidApp()
     }
 }
+

@@ -1,7 +1,6 @@
 package org.qxqx.qxdroid.shv
 
 import java.io.ByteArrayInputStream
-import java.security.InvalidParameterException
 
 enum class Tag(val value: Int) {
     RequestId(8),
@@ -41,10 +40,20 @@ open class RpcMessage(
         fun fromData(data: ByteArray): RpcMessage {
             val reader = ChainPackReader(ByteArrayInputStream(data))
             val v = reader.read()
-            return RpcMessage(v)
+            if (v !is RpcValue.IMap) {
+                throw IllegalArgumentException("Invalid RPC message data, not IMap")
+            }
+            val mm = v.meta?: throw IllegalArgumentException("Invalid RPC message data, no meta")
+            if (mm.get(Tag.RequestId.value) == null) {
+                throw IllegalArgumentException("Rpc signal not supported yet")
+            }
+            if (mm.get(Tag.Method.value) == null) {
+                return RpcResponse(v)
+            }
+            return RpcRequest(v)
         }
 
-        private fun newValue(): RpcValue {
+        internal fun newValue(): RpcValue {
             val v = RpcValue.IMap(mutableMapOf())
             v.meta = createMeta()
             return v
@@ -101,27 +110,41 @@ private fun createMeta(): MetaMap {
     return mm
 }
 
-class RpcRequest(
-    val path: String,
-    val method: String,
-    val param: RpcValue? = null,
-    val userId: String? = null,
-) : RpcMessage(run {
-    requestId += 1L
-    val msg = RpcMessage()
-    msg.setRequestId(requestId)
-    msg.setShvPath(path)
-    msg.setMethod(method)
-    msg.setParam(param)
-    msg.value
-}) {
+class RpcRequest(value: RpcValue) : RpcMessage(value) {
+
+    constructor(
+        path: String,
+        method: String,param: RpcValue? = null,
+        userId: String? = null, // Note: userId was not used in your original constructor logic.
+    ) : this(createRpcValue(path, method, param, userId))
+
     companion object {
         private var requestId: Long = 0L
+
+        private fun createRpcValue(
+            path: String,
+            method: String,
+            param: RpcValue?,
+            userId: String?,
+        ): RpcValue {
+            synchronized(this) {
+                requestId += 1L
+                val msg = RpcMessage()
+                msg.setRequestId(requestId)
+                msg.setShvPath(path)
+                msg.setMethod(method)
+                msg.setParam(param)
+                 msg.setUserId(userId)
+                return msg.value
+            }
+        }
     }
 }
+class RpcResponse(value: RpcValue) : RpcMessage(value) {
 
-class RpcResponse() : RpcMessage() {
-    enum class ErrorCode(val value: Int) {
+    constructor() : this(newValue())
+
+    enum class RpcErrorCode(val value: Int) {
         NoError(0),
         InvalidRequest(1),	// The data sent is not a valid Request object.
         MethodNotFound(2),	// The method does not exist / is not available.
@@ -140,7 +163,7 @@ class RpcResponse() : RpcMessage() {
     }
     private enum class ErrorKey(val value: Int) { Code(1), Message(2) }
 
-    class RpcError(val code: ErrorCode, val message: String)
+    class RpcError(val code: RpcErrorCode, val message: String)
 
     companion object {
         fun fromRequest(request: RpcRequest): RpcResponse {
@@ -170,7 +193,7 @@ class RpcResponse() : RpcMessage() {
         val errmap = value.toIMap()?.get(Key.Error.value)?.toIMap() ?: return null
         val code = errmap.get(ErrorKey.Code.value)?.toInt()?.toInt()
         val message = errmap.get(ErrorKey.Message.value)?.toString()
-        return RpcError(ErrorCode.entries[code?: 0], message?: "Unknown error")
+        return RpcError(RpcErrorCode.entries[code?: 0], message?: "Unknown error")
     }
 }
 

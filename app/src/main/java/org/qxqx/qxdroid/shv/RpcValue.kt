@@ -69,6 +69,12 @@ sealed class RpcValue {
             else -> null
         }
     }
+    fun asString(): kotlin.String? {
+        return when (this) {
+            is String -> value
+            else -> null
+        }
+    }
     fun toList(): kotlin.collections.List<RpcValue>? {
         return when (this) {
             is List -> value
