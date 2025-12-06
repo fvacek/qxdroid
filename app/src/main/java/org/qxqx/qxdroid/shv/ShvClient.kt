@@ -44,9 +44,14 @@ class ShvClient {
     suspend fun connect(url: String) {
         withContext(Dispatchers.IO) {
             try {
-                val parts = url.split(":")
-                val host = parts[0]
-                val port = parts.getOrNull(1)?.toIntOrNull() ?: 80
+                val uri = android.net.Uri.parse(url)
+                if (uri.scheme != "tcp") {
+                    throw IllegalArgumentException("Invalid scheme: ${uri.scheme}")
+                }
+                val host = uri.host ?: throw IllegalArgumentException("No host specified")
+                val port = uri.port?: 3755
+                val user = uri.getQueryParameter("user") ?: throw IllegalArgumentException("No user specified")
+                val password = uri.getQueryParameter("password") ?: throw IllegalArgumentException("No password specified")
 
                 Log.i(TAG, "Connecting to shv broker: $host:$port")
                 socket = Socket(host, port)
@@ -63,7 +68,7 @@ class ShvClient {
                 val nonce = res.toMap()?.get("nonce")?.asString()
                     ?: throw RpcException("Invalid response, invalid nonce")
 
-                val rqid2 = sendLogin(nonce)
+                val rqid2 = sendLogin(user, password, nonce)
                 receiveResponse(rqid2).resultE()
                 Log.i(TAG, "Login to shv broker was successful")
 
@@ -82,9 +87,7 @@ class ShvClient {
         return rqid
     }
 
-    fun sendLogin(nonce: String): Long {
-        val user = "test"
-        val password = "test"
+    fun sendLogin(user: String, password: String, nonce: String): Long {
         val sha1pwd = sha1(nonce + sha1(password))
 
         val param = RpcValue.Map(

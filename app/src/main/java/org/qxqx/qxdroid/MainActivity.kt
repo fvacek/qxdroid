@@ -34,9 +34,12 @@ import androidx.compose.material.icons.filled.AppShortcut
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -47,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -56,6 +60,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
@@ -454,8 +460,9 @@ fun CloudPane(
     onConnectShv: (url: String) -> Unit
 ) {
     var host by rememberSaveable { mutableStateOf("10.0.2.2") }
-    var port by rememberSaveable { mutableStateOf("3755")
-    }
+    var port by rememberSaveable { mutableStateOf("3755") }
+    var user by rememberSaveable { mutableStateOf("test") }
+    var password by rememberSaveable { mutableStateOf("test") }
 
     Column(
         modifier = modifier
@@ -475,8 +482,19 @@ fun CloudPane(
             label = { Text("Port") },
             modifier = Modifier.fillMaxWidth()
         )
+        OutlinedTextField(
+            value = user,
+            onValueChange = { user = it },
+            label = { Text("User") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        PasswordTextField(
+            value = password,
+            onValueChange = { password = it },
+            modifier = Modifier.fillMaxWidth()
+        )
         Button(
-            onClick = { onConnectShv("$host:$port") },
+            onClick = { onConnectShv("tcp://$host:$port?user=$user&password=$password") },
             modifier = Modifier.align(Alignment.End)
         ) {
             Text("Connect")
@@ -491,6 +509,40 @@ enum class AppDestinations(
     SI_READER("Reader", Icons.Default.AppShortcut),
     SHV_CLOUD("Cloud", Icons.Filled.Cloud),
     PROFILE("Profile", Icons.Default.AccountBox),
+}
+
+@Composable
+fun PasswordTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Password",
+) {
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        label = { Text(label) },
+        singleLine = true,
+        visualTransformation = if (passwordVisible)
+            VisualTransformation.None
+        else
+            PasswordVisualTransformation(),
+        trailingIcon = {
+            val icon = if (passwordVisible)
+                Icons.Default.Visibility
+            else
+                Icons.Default.VisibilityOff
+
+            val description = if (passwordVisible) "Hide password" else "Show password"
+
+            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                Icon(imageVector = icon, contentDescription = description)
+            }
+        }
+    )
 }
 
 @Composable
