@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -346,109 +347,126 @@ fun QxDroidApp(
     ) {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
             if (currentDestination == AppDestinations.SI_READER) {
-                var isHexPaneExpanded by rememberSaveable { mutableStateOf(false) }
-                val hexListState = rememberLazyListState()
-                val readActivityDataState = rememberLazyListState()
-                val coroutineScope = rememberCoroutineScope()
+                SIReaderPane(
+                    modifier = Modifier.padding(innerPadding),
+                    hexData = hexData,
+                    readOutObjectData = readOutObjectData,
+                    connectionStatus = connectionStatus,
+                    onClearLog = onClearLog
+                )
+            }
+            if (currentDestination == AppDestinations.SHV_CLOUD) {
+                CloudPane(modifier = Modifier.padding(innerPadding), onConnectShv = onConnectShv)
+            }
+        }
+    }
+}
 
-                LaunchedEffect(hexData.size) {
-                    if (hexData.isNotEmpty()) {
-                        coroutineScope.launch {
-                            hexListState.animateScrollToItem(hexData.size - 1)
-                        }
-                    }
-                }
-                LaunchedEffect(readOutObjectData.size) {
-                    if (readOutObjectData.isNotEmpty()) {
-                        coroutineScope.launch {
-                            readActivityDataState.animateScrollToItem(readOutObjectData.size - 1)
-                        }
-                    }
-                }
+@Composable
+fun SIReaderPane(
+    modifier: Modifier = Modifier,
+    hexData: List<String>,
+    readOutObjectData: List<ReadOutObject>,
+    connectionStatus: String,
+    onClearLog: () -> Unit
+) {
+    var isHexPaneExpanded by rememberSaveable { mutableStateOf(false) }
+    val hexListState = rememberLazyListState()
+    val readActivityDataState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
-                Column(modifier = Modifier.padding(innerPadding)) {
-                    Row(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val statusColor = when {
-                            connectionStatus == "Connected" -> Color(0, 102, 0)
-                            connectionStatus.startsWith("Error") ||
-                                    connectionStatus.startsWith("Disconnected (") ||
-                                    connectionStatus == "Permission denied" ||
-                                    connectionStatus == "Disconnected"
-                            -> Color.Red
-                            else -> Color.Gray
-                        }
-                        Text(
-                            text = connectionStatus,
-                            color = Color.White,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(statusColor)
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedButton(onClick = onClearLog) {
-                            Text(text = "Clear Log")
-                        }
-                    }
-                    Column(Modifier.fillMaxSize()) {
-                        Column(
-                            modifier = if (isHexPaneExpanded) Modifier.weight(1f) else Modifier
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { isHexPaneExpanded = !isHexPaneExpanded }
-                                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                            ) {
-                                Text(
-                                    "Hex Data",
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Icon(
-                                    imageVector = if (isHexPaneExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
-                                    contentDescription = if (isHexPaneExpanded) "Collapse" else "Expand"
-                                )
-                            }
-                            HorizontalDivider()
-                            if (isHexPaneExpanded) {
-                                LazyColumn(state = hexListState) {
-                                    items(hexData.size) { index ->
-                                        Text(text = hexData[index], modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
-                                    }
-                                }
-                            }
-                        }
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                        ) {
-                            Text(
-                                "Card Readout",
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                            )
-                            HorizontalDivider()
-                            ReadActivityLog(log = readOutObjectData, listState = readActivityDataState)
+    LaunchedEffect(hexData.size) {
+        if (hexData.isNotEmpty()) {
+            coroutineScope.launch {
+                hexListState.animateScrollToItem(hexData.size - 1)
+            }
+        }
+    }
+    LaunchedEffect(readOutObjectData.size) {
+        if (readOutObjectData.isNotEmpty()) {
+            coroutineScope.launch {
+                readActivityDataState.animateScrollToItem(readOutObjectData.size - 1)
+            }
+        }
+    }
+
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val statusColor = when {
+                connectionStatus == "Connected" -> Color(0, 102, 0)
+                connectionStatus.startsWith("Error") ||
+                        connectionStatus.startsWith("Disconnected (") ||
+                        connectionStatus == "Permission denied" ||
+                        connectionStatus == "Disconnected"
+                -> Color.Red
+                else -> Color.Gray
+            }
+            Text(
+                text = connectionStatus,
+                color = Color.White,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(statusColor)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(onClick = onClearLog) {
+                Text(text = "Clear Log")
+            }
+        }
+        Column(Modifier.fillMaxSize()) {
+            Column(
+                modifier = if (isHexPaneExpanded) Modifier.weight(1f) else Modifier
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isHexPaneExpanded = !isHexPaneExpanded }
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        "Hex Data",
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        imageVector = if (isHexPaneExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                        contentDescription = if (isHexPaneExpanded) "Collapse" else "Expand"
+                    )
+                }
+                HorizontalDivider()
+                if (isHexPaneExpanded) {
+                    LazyColumn(state = hexListState) {
+                        items(hexData) {
+                            Text(text = it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
                         }
                     }
                 }
             }
-            if (currentDestination == AppDestinations.SHV_CLOUD) {
-                CloudPane(modifier = Modifier.padding(innerPadding), onConnectShv = onConnectShv)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+            ) {
+                Text(
+                    "Card Readout",
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+                HorizontalDivider()
+                ReadActivityLog(log = readOutObjectData, listState = readActivityDataState)
             }
         }
     }
@@ -625,3 +643,10 @@ fun QxDroidAppPreview() {
     }
 }
 
+fun timeToString(time: UShort): String {
+    val seconds = time.toInt()
+    val hours = seconds / 3600
+    val minutes = (seconds % 3600) / 60
+    val secs = seconds % 60
+    return String.format("%02d:%02d:%02d", hours, minutes, secs)
+}
