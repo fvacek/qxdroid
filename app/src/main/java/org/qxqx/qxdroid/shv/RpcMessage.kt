@@ -36,6 +36,8 @@ open class RpcMessage(
 
     constructor() : this(newValue())
 
+    override fun toString() = value.toCpon()
+
     companion object {
         fun fromData(data: ByteArray): RpcMessage {
             val reader = ChainPackReader(ByteArrayInputStream(data))
