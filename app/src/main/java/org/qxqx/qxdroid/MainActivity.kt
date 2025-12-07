@@ -13,67 +13,32 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.AppShortcut
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
-
 import com.hoho.android.usbserial.driver.Cp21xxSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import kotlinx.coroutines.Dispatchers
-import java.io.IOException
 import kotlinx.coroutines.launch
 import org.qxqx.qxdroid.si.CardKind
 import org.qxqx.qxdroid.si.ReadOutObject
@@ -86,6 +51,7 @@ import org.qxqx.qxdroid.si.SiReader
 import org.qxqx.qxdroid.si.toSiRecCommand
 import org.qxqx.qxdroid.shv.ShvClient
 import org.qxqx.qxdroid.ui.theme.QxDroidTheme
+import java.io.IOException
 
 class MainActivity : ComponentActivity() {
 
@@ -362,164 +328,6 @@ fun QxDroidApp(
     }
 }
 
-@Composable
-fun SIReaderPane(
-    modifier: Modifier = Modifier,
-    hexData: List<String>,
-    readOutObjectData: List<ReadOutObject>,
-    connectionStatus: String,
-    onClearLog: () -> Unit
-) {
-    var isHexPaneExpanded by rememberSaveable { mutableStateOf(false) }
-    val hexListState = rememberLazyListState()
-    val readActivityDataState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
-
-    LaunchedEffect(hexData.size) {
-        if (hexData.isNotEmpty()) {
-            coroutineScope.launch {
-                hexListState.animateScrollToItem(hexData.size - 1)
-            }
-        }
-    }
-    LaunchedEffect(readOutObjectData.size) {
-        if (readOutObjectData.isNotEmpty()) {
-            coroutineScope.launch {
-                readActivityDataState.animateScrollToItem(readOutObjectData.size - 1)
-            }
-        }
-    }
-
-    Column(modifier = modifier) {
-        Row(
-            modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val statusColor = when {
-                connectionStatus == "Connected" -> Color(0, 102, 0)
-                connectionStatus.startsWith("Error") ||
-                        connectionStatus.startsWith("Disconnected (") ||
-                        connectionStatus == "Permission denied" ||
-                        connectionStatus == "Disconnected"
-                -> Color.Red
-                else -> Color.Gray
-            }
-            Text(
-                text = connectionStatus,
-                color = Color.White,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(statusColor)
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            )
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedButton(onClick = onClearLog) {
-                Text(text = "Clear Log")
-            }
-        }
-        Column(Modifier.fillMaxSize()) {
-            Column(
-                modifier = if (isHexPaneExpanded) Modifier.weight(1f) else Modifier
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { isHexPaneExpanded = !isHexPaneExpanded }
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        "Hex Data",
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Icon(
-                        imageVector = if (isHexPaneExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
-                        contentDescription = if (isHexPaneExpanded) "Collapse" else "Expand"
-                    )
-                }
-                HorizontalDivider()
-                if (isHexPaneExpanded) {
-                    LazyColumn(state = hexListState) {
-                        items(hexData) {
-                            Text(text = it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
-                        }
-                    }
-                }
-            }
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-            ) {
-                Text(
-                    "Card Readout",
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-                HorizontalDivider()
-                ReadActivityLog(log = readOutObjectData, listState = readActivityDataState)
-            }
-        }
-    }
-}
-
-@Composable
-fun CloudPane(
-    modifier: Modifier = Modifier,
-    onConnectShv: (url: String) -> Unit
-) {
-    var host by rememberSaveable { mutableStateOf("10.0.2.2") }
-    var port by rememberSaveable { mutableStateOf("3755") }
-    var user by rememberSaveable { mutableStateOf("test") }
-    var password by rememberSaveable { mutableStateOf("test") }
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        OutlinedTextField(
-            value = host,
-            onValueChange = { host = it },
-            label = { Text("Host") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = port,
-            onValueChange = { port = it },
-            label = { Text("Port") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = user,
-            onValueChange = { user = it },
-            label = { Text("User") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        PasswordTextField(
-            value = password,
-            onValueChange = { password = it },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Button(
-            onClick = { onConnectShv("tcp://$host:$port?user=$user&password=$password") },
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("Connect")
-        }
-    }
-}
-
 enum class AppDestinations(
     val label: String,
     val icon: ImageVector,
@@ -529,124 +337,10 @@ enum class AppDestinations(
     PROFILE("Profile", Icons.Default.AccountBox),
 }
 
-@Composable
-fun PasswordTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    label: String = "Password",
-) {
-    var passwordVisible by remember { mutableStateOf(false) }
-
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier,
-        label = { Text(label) },
-        singleLine = true,
-        visualTransformation = if (passwordVisible)
-            VisualTransformation.None
-        else
-            PasswordVisualTransformation(),
-        trailingIcon = {
-            val icon = if (passwordVisible)
-                Icons.Default.Visibility
-            else
-                Icons.Default.VisibilityOff
-
-            val description = if (passwordVisible) "Hide password" else "Show password"
-
-            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                Icon(imageVector = icon, contentDescription = description)
-            }
-        }
-    )
-}
-
-@Composable
-fun ReadActivityLog(
-    log: List<ReadOutObject>,
-    modifier: Modifier = Modifier,
-    listState: LazyListState = rememberLazyListState()
-) {
-    var expandedItemIndex by rememberSaveable { mutableStateOf<Int?>(null) }
-
-    LazyColumn(modifier = modifier, state = listState) {
-        itemsIndexed(log) { index, activity ->
-            Column(
-                modifier = Modifier
-                    .background(if (index % 2 == 0) Color.Transparent else Color(0xFFF0F0F0))
-            ) {
-                when (activity) {
-                    is ReadOutObject.CardReadObject -> {
-                        val card = activity.card
-                        val isExpanded = expandedItemIndex == index
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    expandedItemIndex = if (isExpanded) {
-                                        null // Collapse if already expanded
-                                    } else {
-                                        index // Expand this item
-                                    }
-                                }
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Text(
-                                    text = "Card ${card.cardNumber}",
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "(${card.cardKind})"
-                                )
-                            }
-                            Text(
-                                text = "Start: ${timeToString(card.startTime)}, Finish: ${timeToString(card.finishTime)}, Check: ${timeToString(card.checkTime)}"
-                            )
-
-                            if (isExpanded) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                card.punches.forEachIndexed { punchIndex, punch ->
-                                    Text(
-                                        text = "${punchIndex + 1}. Code: ${punch.code}, Time: ${timeToString(punch.time)}",
-                                        modifier = Modifier.padding(start = 16.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    is ReadOutObject.Command -> {
-                        Text(
-                            text = activity.command.toString(),
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
-                }
-                HorizontalDivider()
-            }
-        }
-    }
-}
-
 @Preview(showBackground = true)
 @Composable
 fun QxDroidAppPreview() {
     QxDroidTheme {
         QxDroidApp()
     }
-}
-
-fun timeToString(time: UShort): String {
-    val seconds = time.toInt()
-    val hours = seconds / 3600
-    val minutes = (seconds % 3600) / 60
-    val secs = seconds % 60
-    return String.format("%02d:%02d:%02d", hours, minutes, secs)
 }
