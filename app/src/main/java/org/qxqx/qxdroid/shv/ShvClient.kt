@@ -27,8 +27,12 @@ import java.io.DataOutputStream
 import java.io.IOException
 import java.net.Socket
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.collections.toMap
+import kotlin.text.get
 
 private const val TAG = "ShvClient"
+private const val RPC_MSG = "RpcMsg"
 
 class RpcException(message: String) : Exception(message)
 
@@ -40,12 +44,18 @@ class ShvClient {
     private var writer: DataOutputStream? = null
     private var reader: DataInputStream? = null
 
-    private val clientScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var clientScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private val _messageFlow = MutableSharedFlow<RpcMessage>(replay = 10)
+    // replay parameter controls how many past values new collectors receive when they start listening.
+    private val _messageFlow = MutableSharedFlow<RpcMessage>()
     val messageFlow: SharedFlow<RpcMessage> = _messageFlow.asSharedFlow()
 
+    // This map will hold deferred objects for pending requests.
+    // Use ConcurrentHashMap for thread safety.
+    private val pendingResponses = ConcurrentHashMap<Long, CompletableDeferred<RpcResponse>>()
+
     suspend fun connect(url: String) {
+        clientScope = CoroutineScope(Dispatchers.IO + SupervisorJob()) // Re-create the scope
         withContext(Dispatchers.IO) {
             try {
                 val uri = android.net.Uri.parse(url)
@@ -68,13 +78,12 @@ class ShvClient {
                     listenForMessages()
                 }
 
-                val rqid1 = sendHello()
-                val res = receiveResponse(rqid1).resultE()
-                val nonce = res.toMap()?.get("nonce")?.asString()
+                val helloResponse = sendHello()
+                val nonce = helloResponse.toMap()?.get("nonce")?.asString()
                     ?: throw RpcException("Invalid response, invalid nonce")
 
-                val rqid2 = sendLogin(user, password, nonce)
-                receiveResponse(rqid2).resultE()
+                sendLogin(user, password, nonce)
+
                 Log.i(TAG, "Login to shv broker was successful")
                 _connectionStatus.value = ConnectionStatus.Connected
 
@@ -88,14 +97,13 @@ class ShvClient {
         }
     }
 
-    fun sendHello(): Long {
-        val msg = RpcRequest("", "hello")
-        val rqid = msg.requestId() ?: 0L
-        sendMessage(msg)
-        return rqid
+    suspend fun sendHello(): RpcValue {
+        Log.i(TAG, "Sending hello")
+        return sendRequest("", "hello")
     }
 
-    fun sendLogin(user: String, password: String, nonce: String): Long {
+    suspend fun sendLogin(user: String, password: String, nonce: String): RpcValue {
+        Log.i(TAG, "Sending login")
         val sha1pwd = sha1(nonce + sha1(password))
 
         val param = RpcValue.Map(
@@ -115,10 +123,7 @@ class ShvClient {
             )
         )
 
-        val msg = RpcRequest("", "login", param)
-        val rqid = msg.requestId() ?: 0L
-        sendMessage(msg)
-        return rqid
+        return sendRequest("", "login", param)
     }
 
     private fun sendData(data: ByteArray) {
@@ -133,28 +138,31 @@ class ShvClient {
         }
     }
 
-    private suspend fun receiveResponse(request_id: Long): RpcResponse {
-        Log.d(TAG, "Waiting for response for request: $request_id")
-        val msg = withTimeout(5000) {
-            messageFlow
-                .onEach { m: RpcMessage -> Log.d(TAG, "Message in flow: $m") }
-                .first { m: RpcMessage -> m.requestId() == request_id }
-        }
+    private suspend fun sendRequest(path: String, method: String, params: RpcValue? = null, userId: String? = null): RpcValue {
+        val request = RpcRequest(path, method, params)
+        val requestId = request.requestId() ?: throw IllegalStateException("Request has no ID")
+        val deferred = CompletableDeferred<RpcResponse>()
 
-        Log.d(TAG, "Found message for rqid $request_id: $msg")
+        try {
+            pendingResponses[requestId] = deferred
+            sendMessage(request)
+            Log.d(TAG, "Waiting for response for request: $requestId")
 
-        if (msg !is RpcResponse) {
-            throw RpcException("Unexpected message type received for request $request_id: ${msg.javaClass.simpleName}")
-        }
+            val response = withTimeout(5000) {
+                deferred.await()
+            }
 
-        val err = msg.error()
-        if (err != null) {
-            throw RpcException("RPC error for request $request_id: ${err.message}")
+            return response.resultE()
+        } finally {
+            // Clean up the map in case of timeout or cancellation
+            Log.i(TAG, "removing request id: $requestId")
+
+            pendingResponses.remove(requestId)
         }
-        return msg
     }
 
     fun sendMessage(msg: RpcMessage) {
+        Log.d(RPC_MSG, "S<== $msg")
         val data = msg.value.toChainPack()
         val ba = ByteArrayOutputStream()
         val writer = ChainPackWriter(ba)
@@ -163,21 +171,39 @@ class ShvClient {
         sendData(data)
     }
 
-    private suspend fun listenForMessages() {
+    private fun listenForMessages() {
         try {
             while (clientScope.isActive && reader != null) {
                 try {
                     val frameData = getFrameBytes(reader!!)
-                    Log.d(TAG, "Frame received: ${bytesToHex(frameData)}")
                     val msg = RpcMessage.fromData(frameData)
-                    val emitted = _messageFlow.tryEmit(msg)
-                    Log.d(TAG, "Emitting message: $msg. Success: $emitted")
+                    Log.d(RPC_MSG, "R==> $msg")
+                    if (msg is RpcResponse) {
+                        // It's a response, find the pending request and complete it.
+                        val requestId = msg.requestId()
+                        if (pendingResponses.containsKey(requestId)) {
+                            pendingResponses[requestId]?.complete(msg)
+                            continue
+                        }
+                    }
+                    _messageFlow.tryEmit(msg) // You can still use the flow for notifications
+
+                } catch (e: ReadException) {
+                    if (e.reason == ReadErrorReason.UnexpectedEndOfStream) {
+                        Log.e(TAG, "Socked closed", e)
+                        _connectionStatus.value = ConnectionStatus.Disconnected("Socked closed")
+                        break
+                    }
+                    Log.e(TAG, "Error processing frame, skipping.", e)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error processing frame, skipping.", e)
                 }
             }
         } finally {
             Log.i(TAG, "Message listener stopped.")
+            // When the listener stops, fail all pending requests.
+            pendingResponses.values.forEach { it.cancel() }
+            pendingResponses.clear()
         }
     }
 
@@ -193,6 +219,10 @@ class ShvClient {
             socket?.close()
         } catch (e: IOException) {
             Log.w(TAG, "Error closing socket resources", e)
+        } finally {
+            writer = null
+            reader = null
+            socket = null
         }
     }
 }
