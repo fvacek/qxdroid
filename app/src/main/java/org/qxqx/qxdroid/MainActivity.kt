@@ -24,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -61,7 +62,7 @@ class MainActivity : ComponentActivity() {
     private var usbSerialPort: UsbSerialPort? = null
     private val readLog = mutableStateListOf<ReadOutObject>()
     private val hexLog = mutableStateListOf<String>()
-    private var connectionStatus by mutableStateOf("Disconnected")
+    private var siConnectionStatus by mutableStateOf<ConnectionStatus>(ConnectionStatus.Disconnected("Not connected"))
 
     private lateinit var siReader: SiReader
     private lateinit var serialPortManager: SerialPortManager
@@ -84,7 +85,7 @@ class MainActivity : ComponentActivity() {
             },
             onError = { e ->
                 runOnUiThread {
-                    connectionStatus = "Error: ${e.message}"
+                    siConnectionStatus = ConnectionStatus.Disconnected("Error: ${e.message}")
                     disconnect()
                 }
             },
@@ -107,7 +108,7 @@ class MainActivity : ComponentActivity() {
                                 connect(usbDevice)
                             }
                         } else {
-                            connectionStatus = "Permission denied"
+                            siConnectionStatus = ConnectionStatus.Disconnected("Permission denied")
                         }
                     }
                 }
@@ -117,10 +118,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             QxDroidTheme {
+                val shvConnectionStatus by shvClient.connectionStatus.collectAsState()
                 QxDroidApp(
-                    hexLog, 
-                    readLog, 
-                    connectionStatus, 
+                    hexData = hexLog, 
+                    readOutObjectData = readLog,
+                    shvConnectionStatus = shvConnectionStatus,
                     onClearLog = { clearLog() },
                     onConnectShv = { url ->
                         lifecycleScope.launch(Dispatchers.IO) {
@@ -162,28 +164,28 @@ class MainActivity : ComponentActivity() {
 
     private fun connect(device: UsbDevice) {
         val usbManager = getSystemService(USB_SERVICE) as UsbManager
-        connectionStatus = "Connecting..."
+        siConnectionStatus = ConnectionStatus.Connecting("USB OTG")
         var driver: UsbSerialDriver? = UsbSerialProber.getDefaultProber().probeDevice(device)
         if (driver == null) {
             // If default prober fails, and we know it's a Silicon Labs device,
             // we can try to instantiate the driver manually.
             if (device.vendorId == 0x10C4) {
-                connectionStatus = "VID 10c4 detected, trying manual driver..."
+                siConnectionStatus = ConnectionStatus.Connecting("VID 10c4 detected, trying manual driver...")
                 driver = Cp21xxSerialDriver(device)
             } else {
-                connectionStatus = "Disconnected (no driver found)"
+                siConnectionStatus = ConnectionStatus.Disconnected("No driver found")
                 return
             }
         }
 
         if (driver.ports.isEmpty()) {
-            connectionStatus = "Disconnected (no ports)"
+            siConnectionStatus = ConnectionStatus.Disconnected("No ports")
             return
         }
         usbSerialPort = driver.ports[portNum]
         val usbConnection: UsbDeviceConnection? = usbManager.openDevice(driver.device)
         if (usbConnection == null && !usbManager.hasPermission(driver.device)) {
-            connectionStatus = "Disconnected (permission pending)"
+            siConnectionStatus = ConnectionStatus.Connecting("Permission pending")
             val usbPermissionIntent = PendingIntent.getBroadcast(
                 this,
                 0,
@@ -195,7 +197,7 @@ class MainActivity : ComponentActivity() {
         }
 
         if (usbConnection == null) {
-            connectionStatus = "Disconnected (cannot open device)"
+            siConnectionStatus = ConnectionStatus.Disconnected("Cannot open device")
             return
         }
 
@@ -203,10 +205,10 @@ class MainActivity : ComponentActivity() {
             usbSerialPort?.open(usbConnection)
             usbSerialPort?.setParameters(38400, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
             usbSerialPort?.let { serialPortManager.start(it) }
-            connectionStatus = "Connected"
+            siConnectionStatus = ConnectionStatus.Connected
             clearLog()
         } catch (e: IOException) {
-            connectionStatus = "Error: ${e.message}"
+            siConnectionStatus = ConnectionStatus.Disconnected("Error: ${e.message}")
             disconnect()
         }
     }
@@ -218,8 +220,8 @@ class MainActivity : ComponentActivity() {
         } catch (ignored: IOException) {
         }
         usbSerialPort = null
-        if (connectionStatus != "Permission denied" && !connectionStatus.startsWith("Error")) {
-            connectionStatus = "Disconnected"
+        if (siConnectionStatus !is ConnectionStatus.Disconnected) {
+            siConnectionStatus = ConnectionStatus.Disconnected("Disconnected")
         }
     }
 
@@ -288,7 +290,7 @@ fun QxDroidApp(
             12345uL
         )
     )),
-    connectionStatus: String = "Preview",
+    shvConnectionStatus: ConnectionStatus = ConnectionStatus.Disconnected(""),
     onClearLog: () -> Unit = {},
     onConnectShv: (url: String) -> Unit = {}
 ) {
@@ -317,12 +319,15 @@ fun QxDroidApp(
                     modifier = Modifier.padding(innerPadding),
                     hexData = hexData,
                     readOutObjectData = readOutObjectData,
-                    connectionStatus = connectionStatus,
                     onClearLog = onClearLog
                 )
             }
             if (currentDestination == AppDestinations.SHV_CLOUD) {
-                CloudPane(modifier = Modifier.padding(innerPadding), onConnectShv = onConnectShv)
+                CloudPane(
+                    modifier = Modifier.padding(innerPadding),
+                    connectionStatus = shvConnectionStatus,
+                    onConnectShv = onConnectShv
+                )
             }
         }
     }

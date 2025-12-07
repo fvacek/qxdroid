@@ -44,9 +44,9 @@ fun SIReaderPane(
     modifier: Modifier = Modifier,
     hexData: List<String>,
     readOutObjectData: List<ReadOutObject>,
-    connectionStatus: String,
     onClearLog: () -> Unit
 ) {
+    var connectionStatus = ConnectionStatus.Disconnected("")
     var isHexPaneExpanded by rememberSaveable { mutableStateOf(false) }
     val hexListState = rememberLazyListState()
     val readActivityDataState = rememberLazyListState()
@@ -73,22 +73,13 @@ fun SIReaderPane(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val statusColor = when {
-                connectionStatus == "Connected" -> Color(0, 102, 0)
-                connectionStatus.startsWith("Error") ||
-                        connectionStatus.startsWith("Disconnected (") ||
-                        connectionStatus == "Permission denied" ||
-                        connectionStatus == "Disconnected"
-                -> Color.Red
-                else -> Color.Gray
-            }
             Text(
-                text = connectionStatus,
+                text = connectionStatus.toString(),
                 color = Color.White,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
-                    .background(statusColor)
+                    .background(connectionStatus.color())
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             )
         }

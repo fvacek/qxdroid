@@ -7,18 +7,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import org.qxqx.qxdroid.ConnectionStatus
 import org.qxqx.qxdroid.bytesToHex
 import org.qxqx.qxdroid.sha1
-import org.qxqx.qxdroid.shv.getFrameBytes
-import org.qxqx.qxdroid.shv.Protocol
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -31,6 +33,8 @@ private const val TAG = "ShvClient"
 class RpcException(message: String) : Exception(message)
 
 class ShvClient {
+    private val _connectionStatus = MutableStateFlow<ConnectionStatus>(ConnectionStatus.Disconnected(""))
+    val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus.asStateFlow()
 
     private var socket: Socket? = null
     private var writer: DataOutputStream? = null
@@ -49,10 +53,11 @@ class ShvClient {
                     throw IllegalArgumentException("Invalid scheme: ${uri.scheme}")
                 }
                 val host = uri.host ?: throw IllegalArgumentException("No host specified")
-                val port = uri.port?: 3755
+                val port = if (uri.port == 0) 3755 else uri.port
                 val user = uri.getQueryParameter("user") ?: throw IllegalArgumentException("No user specified")
                 val password = uri.getQueryParameter("password") ?: throw IllegalArgumentException("No password specified")
 
+                _connectionStatus.value = ConnectionStatus.Connecting("$host:$port")
                 Log.i(TAG, "Connecting to shv broker: $host:$port")
                 socket = Socket(host, port)
                 Log.i(TAG, "Connected OK")
@@ -71,9 +76,12 @@ class ShvClient {
                 val rqid2 = sendLogin(user, password, nonce)
                 receiveResponse(rqid2).resultE()
                 Log.i(TAG, "Login to shv broker was successful")
+                _connectionStatus.value = ConnectionStatus.Connected
 
             } catch (e: Exception) {
                 Log.e(TAG, "Connection error", e)
+                val errorMessage = e.message ?: "Unknown error"
+                _connectionStatus.value = ConnectionStatus.Disconnected(errorMessage)
                 close()
                 throw e
             }
@@ -175,6 +183,9 @@ class ShvClient {
 
     fun close() {
         Log.i(TAG, "Closing connection.")
+        if (_connectionStatus.value !is ConnectionStatus.Disconnected) {
+            _connectionStatus.value = ConnectionStatus.Disconnected("Connection closed")
+        }
         clientScope.cancel()
         try {
             writer?.close()
