@@ -30,10 +30,11 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun CloudPane(
+fun ShvPane(
     modifier: Modifier = Modifier,
     connectionStatus: ConnectionStatus,
-    onConnectShv: (url: String) -> Unit
+    connectToShvBroker: (url: String) -> Unit,
+    disconnectShvBroker: () -> Unit
 ) {
     var host by rememberSaveable { mutableStateOf("10.0.2.2") }
     var port by rememberSaveable { mutableStateOf("3755") }
@@ -55,34 +56,43 @@ fun CloudPane(
                 .background(connectionStatus.color())
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         )
-        OutlinedTextField(
-            value = host,
-            onValueChange = { host = it },
-            label = { Text("Host") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = port,
-            onValueChange = { port = it },
-            label = { Text("Port") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = user,
-            onValueChange = { user = it },
-            label = { Text("User") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        PasswordTextField(
-            value = password,
-            onValueChange = { password = it },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Button(
-            onClick = { onConnectShv("tcp://$host:$port?user=$user&password=$password") },
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("Connect")
+        if (connectionStatus !is ConnectionStatus.Connected) {
+            OutlinedTextField(
+                value = host,
+                onValueChange = { host = it },
+                label = { Text("Host") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = port,
+                onValueChange = { port = it },
+                label = { Text("Port") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = user,
+                onValueChange = { user = it },
+                label = { Text("User") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            PasswordTextField(
+                value = password,
+                onValueChange = { password = it },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(
+                onClick = { connectToShvBroker("tcp://$host:$port?user=$user&password=$password") },
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("Connect")
+            }
+        } else {
+            Button(
+                onClick = { disconnectShvBroker() },
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("Disconnect")
+            }
         }
     }
 }

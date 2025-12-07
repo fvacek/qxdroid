@@ -124,7 +124,7 @@ class MainActivity : ComponentActivity() {
                     readOutObjectData = readLog,
                     shvConnectionStatus = shvConnectionStatus,
                     onClearLog = { clearLog() },
-                    onConnectShv = { url ->
+                    connectToShvBroker = { url ->
                         lifecycleScope.launch(Dispatchers.IO) {
                             try {
                                 shvClient.connect(url)
@@ -132,7 +132,8 @@ class MainActivity : ComponentActivity() {
                                 Log.e("MainActivity", "Connection error", e)
                             }
                         }
-                    }
+                    },
+                    disconnectShvBroker = { shvClient.close() }
                 )
             }
         }
@@ -292,7 +293,8 @@ fun QxDroidApp(
     )),
     shvConnectionStatus: ConnectionStatus = ConnectionStatus.Disconnected(""),
     onClearLog: () -> Unit = {},
-    onConnectShv: (url: String) -> Unit = {}
+    connectToShvBroker: (url: String) -> Unit = {},
+    disconnectShvBroker: () -> Unit = {},
 ) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.SHV_CLOUD) }
 
@@ -323,10 +325,11 @@ fun QxDroidApp(
                 )
             }
             if (currentDestination == AppDestinations.SHV_CLOUD) {
-                CloudPane(
+                ShvPane(
                     modifier = Modifier.padding(innerPadding),
                     connectionStatus = shvConnectionStatus,
-                    onConnectShv = onConnectShv
+                    connectToShvBroker = connectToShvBroker,
+                    disconnectShvBroker = disconnectShvBroker
                 )
             }
         }

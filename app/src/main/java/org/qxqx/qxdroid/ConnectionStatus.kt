@@ -17,7 +17,7 @@ sealed class ConnectionStatus() {
             return "Connecting to $progress"
         }
         override fun color(): Color {
-            return Color.Yellow
+            return Color(0xFFFFA500) // orange
         }
     }
     data class Disconnected(val error: String) : ConnectionStatus() {
