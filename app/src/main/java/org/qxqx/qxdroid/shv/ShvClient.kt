@@ -4,8 +4,11 @@ import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -24,6 +27,7 @@ import java.io.DataOutputStream
 import java.io.IOException
 import java.net.Socket
 import java.util.concurrent.ConcurrentHashMap
+import androidx.core.net.toUri
 
 private const val TAG = "ShvClient"
 private const val RPC_MSG = "RpcMsg"
@@ -37,6 +41,7 @@ class ShvClient {
     private var socket: Socket? = null
     private var writer: DataOutputStream? = null
     private var reader: DataInputStream? = null
+    private var pingJob: Job? = null
 
     private var clientScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -52,7 +57,7 @@ class ShvClient {
         clientScope = CoroutineScope(Dispatchers.IO + SupervisorJob()) // Re-create the scope
         withContext(Dispatchers.IO) {
             try {
-                val uri = android.net.Uri.parse(url)
+                val uri = url.toUri()
                 if (uri.scheme != "tcp") {
                     throw IllegalArgumentException("Invalid scheme: ${uri.scheme}")
                 }
@@ -76,10 +81,21 @@ class ShvClient {
                 val nonce = helloResponse.toMap()?.get("nonce")?.asString()
                     ?: throw RpcException("Invalid response, invalid nonce")
 
-                sendLogin(user, password, nonce)
+                val pingIntervalSeconds = 90
+                sendLogin(user, password, nonce, pingIntervalSeconds)
 
                 Log.i(TAG, "Login to shv broker was successful")
                 _connectionStatus.value = ConnectionStatus.Connected
+                pingJob = clientScope.launch {
+                    while (isActive) {
+                        try {
+                            callShvMethod(".app", "ping")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Ping failed: ${e.message}")
+                        }
+                        delay(pingIntervalSeconds * 1000L)
+                    }
+                }
 
             } catch (e: Exception) {
                 Log.e(TAG, "Connection error", e)
@@ -96,7 +112,7 @@ class ShvClient {
         return callShvMethod("", "hello")
     }
 
-    suspend fun sendLogin(user: String, password: String, nonce: String): RpcValue {
+    suspend fun sendLogin(user: String, password: String, nonce: String, pingIntervalSeconds: Int): RpcValue {
         Log.i(TAG, "Sending login")
         val sha1pwd = sha1(nonce + sha1(password))
 
@@ -111,7 +127,7 @@ class ShvClient {
                 ),
                 "options" to RpcValue.Map(
                     mapOf(
-                        "idleWatchDogTimeOut" to RpcValue.Int(180),
+                        "idleWatchDogTimeOut" to RpcValue.Int(pingIntervalSeconds * 2),
                     )
                 ),
             )
@@ -133,7 +149,7 @@ class ShvClient {
     }
 
     private suspend fun callShvMethod(path: String, method: String, params: RpcValue? = null, userId: String? = null): RpcValue {
-        val request = RpcRequest(path, method, params)
+        val request = RpcRequest(path, method, params, userId)
         val requestId = request.requestId() ?: throw IllegalStateException("Request has no ID")
         val deferred = CompletableDeferred<RpcResponse>()
 
@@ -206,6 +222,7 @@ class ShvClient {
         if (_connectionStatus.value !is ConnectionStatus.Disconnected) {
             _connectionStatus.value = ConnectionStatus.Disconnected("Connection closed")
         }
+        pingJob?.cancel()
         clientScope.cancel()
         try {
             writer?.close()
