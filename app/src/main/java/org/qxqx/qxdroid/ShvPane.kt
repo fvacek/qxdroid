@@ -16,18 +16,23 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 @Composable
 fun ShvPane(
@@ -36,10 +41,22 @@ fun ShvPane(
     connectToShvBroker: (url: String) -> Unit,
     disconnectShvBroker: () -> Unit
 ) {
-    var host by rememberSaveable { mutableStateOf("10.0.2.2") }
-    var port by rememberSaveable { mutableStateOf("3755") }
-    var user by rememberSaveable { mutableStateOf("test") }
-    var password by rememberSaveable { mutableStateOf("test") }
+    val context = LocalContext.current
+    val appSettings = remember { AppSettings(context) }
+    val scope = rememberCoroutineScope()
+
+    var host by remember { mutableStateOf("") }
+    var port by remember { mutableStateOf("") }
+    var user by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        val params = appSettings.connectionParams.first()
+        host = params.host
+        port = params.port
+        user = params.user
+        password = params.password
+    }
 
     Column(
         modifier = modifier
@@ -81,7 +98,13 @@ fun ShvPane(
                 modifier = Modifier.fillMaxWidth()
             )
             Button(
-                onClick = { connectToShvBroker("tcp://$host:$port?user=$user&password=$password") },
+                onClick = {
+                    val params = ConnectionParams(host, port, user, password)
+                    scope.launch {
+                        appSettings.saveConnectionParams(params)
+                    }
+                    connectToShvBroker("tcp://${params.host}:${params.port}?user=${params.user}&password=${params.password}")
+                },
                 modifier = Modifier.align(Alignment.End)
             ) {
                 Text("Connect")
