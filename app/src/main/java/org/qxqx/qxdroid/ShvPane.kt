@@ -17,7 +17,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,7 +50,7 @@ fun ShvPane(
     var password by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        val params = appSettings.connectionParams.first()
+        val params = appSettings.shvConnectionParams.first()
         host = params.host
         port = params.port
         user = params.user
@@ -99,7 +98,7 @@ fun ShvPane(
             )
             Button(
                 onClick = {
-                    val params = ConnectionParams(host, port, user, password)
+                    val params = ShvConnectionParams(host, port, user, password)
                     scope.launch {
                         appSettings.saveConnectionParams(params)
                     }

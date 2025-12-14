@@ -1,6 +1,6 @@
 package org.qxqx.qxdroid
 
-data class ConnectionParams(
+data class ShvConnectionParams(
     val host: String,
     val port: String,
     val user: String,
