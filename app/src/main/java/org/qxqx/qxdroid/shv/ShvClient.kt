@@ -12,24 +12,18 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.qxqx.qxdroid.ConnectionStatus
-import org.qxqx.qxdroid.bytesToHex
 import org.qxqx.qxdroid.sha1
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
 import java.net.Socket
-import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.collections.toMap
-import kotlin.text.get
 
 private const val TAG = "ShvClient"
 private const val RPC_MSG = "RpcMsg"
@@ -99,7 +93,7 @@ class ShvClient {
 
     suspend fun sendHello(): RpcValue {
         Log.i(TAG, "Sending hello")
-        return sendRequest("", "hello")
+        return callShvMethod("", "hello")
     }
 
     suspend fun sendLogin(user: String, password: String, nonce: String): RpcValue {
@@ -123,7 +117,7 @@ class ShvClient {
             )
         )
 
-        return sendRequest("", "login", param)
+        return callShvMethod("", "login", param)
     }
 
     private fun sendData(data: ByteArray) {
@@ -138,7 +132,7 @@ class ShvClient {
         }
     }
 
-    private suspend fun sendRequest(path: String, method: String, params: RpcValue? = null, userId: String? = null): RpcValue {
+    private suspend fun callShvMethod(path: String, method: String, params: RpcValue? = null, userId: String? = null): RpcValue {
         val request = RpcRequest(path, method, params)
         val requestId = request.requestId() ?: throw IllegalStateException("Request has no ID")
         val deferred = CompletableDeferred<RpcResponse>()
