@@ -2,6 +2,7 @@ package org.qxqx.qxdroid.shv
 
 // import android.util.Log
 import org.qxqx.qxdroid.bytesToHex
+import org.qxqx.qxdroid.shv.RpcValue.Int
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -47,11 +48,15 @@ sealed class RpcValue {
         }
     }
     data class Int(val value: Long) : RpcValue() {
+        constructor(value: kotlin.Int) : this(value.toLong())
+
         override fun valueToCpon(): kotlin.String {
             return value.toString()
         }
     }
     data class UInt(val value: ULong) : RpcValue() {
+        constructor(value: kotlin.UInt) : this(value.toULong())
+
         override fun valueToCpon(): kotlin.String {
             return value.toString()
         }
