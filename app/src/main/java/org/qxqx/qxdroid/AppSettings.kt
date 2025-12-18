@@ -36,6 +36,7 @@ class AppSettings(context: Context) {
         val PORT = stringPreferencesKey("port")
         val USER = stringPreferencesKey("user")
         val PASSWORD = stringPreferencesKey("password")
+        val API_TOKEN = stringPreferencesKey("apiToken")
     }
 
     private object SerialPortKeys {
@@ -51,7 +52,8 @@ class AppSettings(context: Context) {
             host = prefs[ShvConnectionKeys.HOST] ?: "10.0.2.2",
             port = prefs[ShvConnectionKeys.PORT] ?: "3755",
             user = prefs[ShvConnectionKeys.USER] ?: "test",
-            password = prefs[ShvConnectionKeys.PASSWORD] ?: "test"
+            password = prefs[ShvConnectionKeys.PASSWORD] ?: "test",
+            apiToken = prefs[ShvConnectionKeys.API_TOKEN] ?: "foo-bar"
         )
     }
 

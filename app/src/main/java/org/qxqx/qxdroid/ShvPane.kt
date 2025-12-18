@@ -48,6 +48,7 @@ fun ShvPane(
     var port by remember { mutableStateOf("") }
     var user by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var apiToken by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         val params = appSettings.shvConnectionParams.first()
@@ -55,6 +56,7 @@ fun ShvPane(
         port = params.port
         user = params.user
         password = params.password
+        apiToken = params.apiToken
     }
 
     Column(
@@ -96,9 +98,15 @@ fun ShvPane(
                 onValueChange = { password = it },
                 modifier = Modifier.fillMaxWidth()
             )
+            OutlinedTextField(
+                value = apiToken,
+                onValueChange = { apiToken = it },
+                label = { Text("API token") },
+                modifier = Modifier.fillMaxWidth()
+            )
             Button(
                 onClick = {
-                    val params = ShvConnectionParams(host, port, user, password)
+                    val params = ShvConnectionParams(host, port, user, password, apiToken)
                     scope.launch {
                         appSettings.saveConnectionParams(params)
                     }
