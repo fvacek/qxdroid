@@ -15,7 +15,7 @@ class SiViewModel : ViewModel() {
     var connectionStatus by mutableStateOf<ConnectionStatus>(ConnectionStatus.Disconnected("Not connected"))
         private set
 
-    private val siReaderWriter: SiReaderWriter = SiReaderWriter(
+    private val siProtocolDecoder: SiProtocolDecoder = SiProtocolDecoder(
         sendSiFrame = { frame -> serialPortManager.sendDataFrame(frame) },
         onCardRead = { card ->
             readLog.add(ReadOutObject.CardReadObject(card))
@@ -25,7 +25,7 @@ class SiViewModel : ViewModel() {
     private val serialPortManager: SerialPortManager = SerialPortManager(
         onRawData = { data -> hexLog.add(bytesToHex(data)) },
         onDataFrame = { frame ->
-            siReaderWriter.onDataFrame(frame)
+            siProtocolDecoder.onDataFrame(frame)
             logDataFrame(frame)
         },
         onError = { e ->

@@ -200,6 +200,14 @@ fun ReadActivityLog(
                                         modifier = Modifier.padding(start = 16.dp)
                                     )
                                 }
+                                if (card.baterryStatus != null) {
+                                    Text(
+                                        text = "Battery: ${"%.2f".format(card.baterryStatus!!.baterryVoltage)}V, Low: ${card.baterryStatus!!.baterryLow}"
+                                    )
+                                    Text(
+                                        text = "Battery replace date: ${card.baterryStatus!!.batteryReplaceDate}"
+                                    )
+                                }
                             }
                         }
                     }

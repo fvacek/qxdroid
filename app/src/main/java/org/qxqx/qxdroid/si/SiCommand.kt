@@ -1,6 +1,10 @@
 package org.qxqx.qxdroid.si
 
+import org.qxqx.qxdroid.bytesFromHex
+import org.qxqx.qxdroid.shv.RpcValue
 import org.qxqx.qxdroid.timeToString
+import java.time.LocalDate
+import java.util.Date
 
 private const val TAG = "SiCommand"
 
@@ -9,10 +13,12 @@ enum class SiCmd(val code: Int) {
     STATION_BEEP(0x06),
     GET_CARD_5(0xB1),
     GET_CARD_6(0xE1),
-    GET_CARD_8(0xEF),
     CARD_DETECTED_5(0xE5),
     CARD_REMOVED(0xE7),
-    CARD_DETECTED_8(0xE8);
+    CARD_DETECTED_8(0xE8),
+    SIAC_MEASURE_BATTERY(0xEA),
+    GET_CARD_8(0xEF),
+    ;
 
     companion object {
         fun fromCode(code: Int): SiCmd =
@@ -61,6 +67,11 @@ data class SiPunch(
     var time: Int,
 )
 
+data class SiacBatteryStatus(
+    val baterryVoltage: Double,
+    val baterryLow: Boolean,
+    val batteryReplaceDate: LocalDate,
+)
 data class SiCard(
     val cardKind: CardKind,
     val cardSerie: Int,
@@ -70,6 +81,10 @@ data class SiCard(
     val finishTime: Int,
     val punches: Array<SiPunch>,
 ) : SiRecCommand() {
+    var baterryStatus: SiacBatteryStatus? = null
+
+    constructor() : this(CardKind.CARD_5, 0, 0, 0, 0, 0, arrayOf())
+
     override fun toString(): String {
         var punchesStr = ""
         var no = 0
@@ -92,23 +107,13 @@ $punchesStr
     }
 }
 
-//data class ReadedSiCard (
-//    val card: SiCard,
-//    val punchCount: Int,
-//)
-
-//data class GetSiCard5Resp(
-//    val stationNumber: Int,
-//    val data: ByteArray
-//) : SiRecCommand() {
-//}
-
 data class GetSiCardResp(
     val stationNumber: Int,
     val blockNumber: Int,
     val data: ByteArray
-) : SiRecCommand() {
-}
+) : SiRecCommand()
+
+class SiacMeasureBatteryVoltageResp() : SiRecCommand()
 
 private fun parseDataLayoutCardDetectedRemoved(data: ByteArray): Triple<CardKind, UInt, ULong> {
     // Assumed layout: [stationNumber: 2 bytes BE, cardNumber: 4 bytes BE]
@@ -164,6 +169,9 @@ fun toSiRecCommand(frame: SiDataFrame): SiRecCommand {
             assert(data.size == 128)
             GetSiCardResp(stationNumber, blockNumber, data)
         }
+        SiCmd.SIAC_MEASURE_BATTERY.code -> {
+            SiacMeasureBatteryVoltageResp()
+        }
         else -> throw IllegalArgumentException("Unknown command 0x${frame.command.toString(16)}")
     }
 }
@@ -173,6 +181,14 @@ sealed class SiSendCommand(val command: SiCmd) {
 
     override fun toString(): String {
         return toSiFrame().toString()
+    }
+}
+
+open class SiacMeasureBatteyVoltage(
+) : SiSendCommand(SiCmd.SIAC_MEASURE_BATTERY) {
+    override fun toSiFrame(): SiDataFrame {
+        // 02 EA 05 7E 05 05 05 05 B2 31 03 - EA - PROBABLY SIAC battery measurement request
+        return SiDataFrame(command.code, bytesFromHex("7E 05 05 05 05"))
     }
 }
 
