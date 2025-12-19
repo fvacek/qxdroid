@@ -41,16 +41,6 @@ import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.qxqx.qxdroid.si.CardKind
-import org.qxqx.qxdroid.si.ReadOutObject
-import org.qxqx.qxdroid.si.SerialPortManager
-import org.qxqx.qxdroid.si.SiCard
-import org.qxqx.qxdroid.si.SiCardDetected
-import org.qxqx.qxdroid.si.SiCardRemoved
-import org.qxqx.qxdroid.si.SiDataFrame
-import org.qxqx.qxdroid.si.SiReader
-import org.qxqx.qxdroid.si.toSiRecCommand
-import org.qxqx.qxdroid.shv.ShvClient
 import org.qxqx.qxdroid.ui.theme.QxDroidTheme
 import java.io.IOException
 
@@ -60,37 +50,13 @@ class MainActivity : ComponentActivity() {
     private var portNum: Int = 0
     private lateinit var usbPermissionReceiver: BroadcastReceiver
     private var usbSerialPort: UsbSerialPort? = null
-    private val readLog = mutableStateListOf<ReadOutObject>()
-    private val hexLog = mutableStateListOf<String>()
     private var siConnectionStatus by mutableStateOf<ConnectionStatus>(ConnectionStatus.Disconnected("Not connected"))
-
-    private lateinit var siReader: SiReader
-    private lateinit var serialPortManager: SerialPortManager
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        siReader = SiReader(
-            sendSiFrame = { frame -> serialPortManager.sendDataFrame(frame) },
-            onCardRead = { card -> logSiCard(card) }
-        )
-        serialPortManager = SerialPortManager(
-            onRawData = { data -> runOnUiThread { hexLog.add(bytesToHex(data)) } },
-            onDataFrame = { frame ->
-                run {
-                    siReader.onDataFrame(frame)
-                    logDataFrame(frame)
-                }
-            },
-            onError = { e ->
-                runOnUiThread {
-                    siConnectionStatus = ConnectionStatus.Disconnected("Error: ${e.message}")
-                    disconnect()
-                }
-            },
-        )
-        
+
 
 
         usbPermissionReceiver = object : BroadcastReceiver() {
@@ -119,35 +85,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             QxDroidTheme {
                 QxDroidApp(
-                    hexData = hexLog, 
-                    readOutObjectData = readLog,
-                    onClearLog = { clearLog() }
+                    usbSerialPort = usbSerialPort,
+                    onConnectionStatusChange = { status -> siConnectionStatus = status }
                 )
             }
         }
         handleIntent(intent)
     }
 
-    private fun clearLog() {
-        readLog.clear()
-        hexLog.clear()
-    }
 
-    private fun logDataFrame(dataFrame: SiDataFrame) {
-        runOnUiThread {
-            val cmd = toSiRecCommand(dataFrame)
-            if (cmd is SiCardDetected || cmd is SiCardRemoved) {
-                readLog.add(ReadOutObject.Command(cmd))
-            }
-        }
-    }
-
-    private fun logSiCard(card: SiCard) {
-        //Log.d("MainActivity", "SI card read: ${card}.")
-        runOnUiThread {
-            readLog.add(ReadOutObject.CardReadObject(card))
-        }
-    }
 
     // --- USB Connection Logic ---
 
@@ -193,9 +139,7 @@ class MainActivity : ComponentActivity() {
         try {
             usbSerialPort?.open(usbConnection)
             usbSerialPort?.setParameters(38400, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-            usbSerialPort?.let { serialPortManager.start(it) }
             siConnectionStatus = ConnectionStatus.Connected
-            clearLog()
         } catch (e: IOException) {
             siConnectionStatus = ConnectionStatus.Disconnected("Error: ${e.message}")
             disconnect()
@@ -203,7 +147,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun disconnect() {
-        serialPortManager.stop()
         try {
             usbSerialPort?.close()
         } catch (ignored: IOException) {
@@ -270,16 +213,8 @@ class MainActivity : ComponentActivity() {
 @PreviewScreenSizes
 @Composable
 fun QxDroidApp(
-    hexData: List<String> = listOf("DEADBEEF"),
-    readOutObjectData: List<ReadOutObject> = listOf(
-        ReadOutObject.Command(
-        SiCardDetected(
-            CardKind.CARD_5,
-            2u,
-            12345uL
-        )
-    )),
-    onClearLog: () -> Unit = {},
+    usbSerialPort: UsbSerialPort? = null,
+    onConnectionStatusChange: (ConnectionStatus) -> Unit = {}
 ) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.SHV_CLOUD) }
 
@@ -304,9 +239,8 @@ fun QxDroidApp(
             if (currentDestination == AppDestinations.SI_READER) {
                 SIReaderPane(
                     modifier = Modifier.padding(innerPadding),
-                    hexData = hexData,
-                    readOutObjectData = readOutObjectData,
-                    onClearLog = onClearLog
+                    usbSerialPort = usbSerialPort,
+                    onConnectionStatusChange = onConnectionStatusChange
                 )
             }
             if (currentDestination == AppDestinations.SHV_CLOUD) {
