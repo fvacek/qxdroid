@@ -8,11 +8,12 @@ import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
+import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -24,9 +25,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -34,47 +33,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import androidx.lifecycle.lifecycleScope
 import com.hoho.android.usbserial.driver.Cp21xxSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialDriver
-import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.qxqx.qxdroid.ui.theme.QxDroidTheme
-import java.io.IOException
 
 class MainActivity : ComponentActivity() {
 
-    private var deviceId: Int = 0
+    private val viewModel: SiViewModel by viewModels()
     private var portNum: Int = 0
     private lateinit var usbPermissionReceiver: BroadcastReceiver
-    private var usbSerialPort: UsbSerialPort? = null
-    private var siConnectionStatus by mutableStateOf<ConnectionStatus>(ConnectionStatus.Disconnected("Not connected"))
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-
-
 
         usbPermissionReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (ACTION_USB_PERMISSION == intent.action) {
                     synchronized(this) {
                         val usbDevice: UsbDevice? =
-                            intent.getParcelableExtra(
-                                UsbManager.EXTRA_DEVICE,
-                                UsbDevice::class.java
-                            )
+                            intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+
                         if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                             if (usbDevice != null) {
-                                //permission granted
                                 connect(usbDevice)
                             }
                         } else {
-                            siConnectionStatus = ConnectionStatus.Disconnected("Permission denied")
+                            viewModel.setStatus(ConnectionStatus.Disconnected("Permission denied"))
                         }
                     }
                 }
@@ -84,43 +69,34 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             QxDroidTheme {
-                QxDroidApp(
-                    usbSerialPort = usbSerialPort,
-                    onConnectionStatusChange = { status -> siConnectionStatus = status }
-                )
+                QxDroidApp()
             }
         }
         handleIntent(intent)
     }
 
-
-
-    // --- USB Connection Logic ---
-
     private fun connect(device: UsbDevice) {
         val usbManager = getSystemService(USB_SERVICE) as UsbManager
-        siConnectionStatus = ConnectionStatus.Connecting("USB OTG")
+        viewModel.setStatus(ConnectionStatus.Connecting("USB OTG"))
         var driver: UsbSerialDriver? = UsbSerialProber.getDefaultProber().probeDevice(device)
         if (driver == null) {
-            // If default prober fails, and we know it's a Silicon Labs device,
-            // we can try to instantiate the driver manually.
             if (device.vendorId == 0x10C4) {
-                siConnectionStatus = ConnectionStatus.Connecting("VID 10c4 detected, trying manual driver...")
+                viewModel.setStatus(ConnectionStatus.Connecting("VID 10c4 detected, trying manual driver..."))
                 driver = Cp21xxSerialDriver(device)
             } else {
-                siConnectionStatus = ConnectionStatus.Disconnected("No driver found")
+                viewModel.setStatus(ConnectionStatus.Disconnected("No driver found"))
                 return
             }
         }
 
         if (driver.ports.isEmpty()) {
-            siConnectionStatus = ConnectionStatus.Disconnected("No ports")
+            viewModel.setStatus(ConnectionStatus.Disconnected("No ports"))
             return
         }
-        usbSerialPort = driver.ports[portNum]
+        val usbSerialPort = driver.ports[portNum]
         val usbConnection: UsbDeviceConnection? = usbManager.openDevice(driver.device)
         if (usbConnection == null && !usbManager.hasPermission(driver.device)) {
-            siConnectionStatus = ConnectionStatus.Connecting("Permission pending")
+            viewModel.setStatus(ConnectionStatus.Connecting("Permission pending"))
             val usbPermissionIntent = PendingIntent.getBroadcast(
                 this,
                 0,
@@ -132,37 +108,22 @@ class MainActivity : ComponentActivity() {
         }
 
         if (usbConnection == null) {
-            siConnectionStatus = ConnectionStatus.Disconnected("Cannot open device")
+            viewModel.setStatus(ConnectionStatus.Disconnected("Cannot open device"))
             return
         }
 
-        try {
-            usbSerialPort?.open(usbConnection)
-            usbSerialPort?.setParameters(38400, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-            siConnectionStatus = ConnectionStatus.Connected
-        } catch (e: IOException) {
-            siConnectionStatus = ConnectionStatus.Disconnected("Error: ${e.message}")
-            disconnect()
-        }
-    }
-
-    private fun disconnect() {
-        try {
-            usbSerialPort?.close()
-        } catch (ignored: IOException) {
-        }
-        usbSerialPort = null
-        if (siConnectionStatus !is ConnectionStatus.Disconnected) {
-            siConnectionStatus = ConnectionStatus.Disconnected("Disconnected")
-        }
+        viewModel.connect(usbSerialPort, usbConnection)
     }
 
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
-            val device: UsbDevice? =
+            val device: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            }
             device?.let {
-                this.deviceId = it.deviceId
                 portNum = 0
                 connect(it)
             }
@@ -176,19 +137,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        registerReceiver(usbPermissionReceiver, IntentFilter(ACTION_USB_PERMISSION), RECEIVER_NOT_EXPORTED)
+        val filter = IntentFilter(ACTION_USB_PERMISSION)
+        registerReceiver(usbPermissionReceiver, filter, RECEIVER_NOT_EXPORTED)
 
-        if (usbSerialPort == null || usbSerialPort?.isOpen == false) {
-            val usbManager = getSystemService(USB_SERVICE) as UsbManager
-            val prober = UsbSerialProber.getDefaultProber()
-            for (device in usbManager.deviceList.values) {
-                val driver =
-                    prober.probeDevice(device) ?: if (device.vendorId == 0x10C4) Cp21xxSerialDriver(device) else null
-                if (driver != null) {
-                    this.portNum = 0 // Connect to the first port
-                    connect(device)
-                    break
-                }
+        // Try to connect if a device is already attached
+        val usbManager = getSystemService(USB_SERVICE) as UsbManager
+        val prober = UsbSerialProber.getDefaultProber()
+        for (device in usbManager.deviceList.values) {
+            val driver = prober.probeDevice(device) ?: if (device.vendorId == 0x10C4) Cp21xxSerialDriver(device) else null
+            if (driver != null) {
+                this.portNum = 0
+                connect(device)
+                break
             }
         }
     }
@@ -201,7 +161,7 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         if (!isChangingConfigurations) {
-            disconnect()
+            viewModel.disconnect()
         }
     }
 
@@ -212,11 +172,8 @@ class MainActivity : ComponentActivity() {
 
 @PreviewScreenSizes
 @Composable
-fun QxDroidApp(
-    usbSerialPort: UsbSerialPort? = null,
-    onConnectionStatusChange: (ConnectionStatus) -> Unit = {}
-) {
-    var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.SHV_CLOUD) }
+fun QxDroidApp() {
+    var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.SI_READER) }
 
     NavigationSuiteScaffold(
         navigationSuiteItems = {
@@ -236,17 +193,20 @@ fun QxDroidApp(
         }
     ) {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            if (currentDestination == AppDestinations.SI_READER) {
-                SIReaderPane(
-                    modifier = Modifier.padding(innerPadding),
-                    usbSerialPort = usbSerialPort,
-                    onConnectionStatusChange = onConnectionStatusChange
-                )
-            }
-            if (currentDestination == AppDestinations.SHV_CLOUD) {
-                ShvPane(
-                    modifier = Modifier.padding(innerPadding)
-                )
+            when (currentDestination) {
+                AppDestinations.SI_READER -> {
+                    SIReaderPane(
+                        modifier = Modifier.padding(innerPadding)
+                    )
+                }
+                AppDestinations.SHV_CLOUD -> {
+                    ShvPane(
+                        modifier = Modifier.padding(innerPadding)
+                    )
+                }
+                AppDestinations.PROFILE -> {
+                    // Profile Pane could go here
+                }
             }
         }
     }

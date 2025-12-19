@@ -6,9 +6,7 @@ plugins {
 
 android {
     namespace = "org.qxqx.qxdroid"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "org.qxqx.qxdroid"
@@ -45,6 +43,7 @@ dependencies {
     implementation(libs.usb.serial.for1.android)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

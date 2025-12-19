@@ -4,8 +4,8 @@ import android.util.Log
 
 private const val TAG = "SiReader"
 
-class SiReader(
-    val sendSiFrame: (SiDataFrame) -> Unit,
+class SiReaderWriter(
+    var sendSiFrame: (SiDataFrame) -> Unit,
     val onCardRead: (SiCard) -> Unit,
 ) {
     private var currentCard: SiCard? = null
