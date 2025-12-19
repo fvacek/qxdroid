@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var siReader: SiReader
     private lateinit var serialPortManager: SerialPortManager
-    private lateinit var shvClient: ShvClient
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,7 +91,7 @@ class MainActivity : ComponentActivity() {
             },
         )
         
-        shvClient = ShvClient()
+
 
         usbPermissionReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
@@ -118,22 +118,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             QxDroidTheme {
-                val shvConnectionStatus by shvClient.connectionStatus.collectAsState()
                 QxDroidApp(
                     hexData = hexLog, 
                     readOutObjectData = readLog,
-                    shvConnectionStatus = shvConnectionStatus,
-                    onClearLog = { clearLog() },
-                    connectToShvBroker = { url ->
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            try {
-                                shvClient.connect(url)
-                            } catch (e: Exception) {
-                                Log.e("MainActivity", "Connection error", e)
-                            }
-                        }
-                    },
-                    disconnectShvBroker = { shvClient.close() }
+                    onClearLog = { clearLog() }
                 )
             }
         }
@@ -291,10 +279,7 @@ fun QxDroidApp(
             12345uL
         )
     )),
-    shvConnectionStatus: ConnectionStatus = ConnectionStatus.Disconnected(""),
     onClearLog: () -> Unit = {},
-    connectToShvBroker: (url: String) -> Unit = {},
-    disconnectShvBroker: () -> Unit = {},
 ) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.SHV_CLOUD) }
 
@@ -326,10 +311,7 @@ fun QxDroidApp(
             }
             if (currentDestination == AppDestinations.SHV_CLOUD) {
                 ShvPane(
-                    modifier = Modifier.padding(innerPadding),
-                    connectionStatus = shvConnectionStatus,
-                    connectToShvBroker = connectToShvBroker,
-                    disconnectShvBroker = disconnectShvBroker
+                    modifier = Modifier.padding(innerPadding)
                 )
             }
         }

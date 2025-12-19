@@ -1,5 +1,6 @@
 package org.qxqx.qxdroid
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,19 +32,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.qxqx.qxdroid.shv.ShvClient
 
 @Composable
 fun ShvPane(
-    modifier: Modifier = Modifier,
-    connectionStatus: ConnectionStatus,
-    connectToShvBroker: (url: String) -> Unit,
-    disconnectShvBroker: () -> Unit
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val appSettings = remember { AppSettings(context) }
     val scope = rememberCoroutineScope()
+    
+    val shvClient = remember { ShvClient() }
+    val connectionStatus by shvClient.connectionStatus.collectAsState()
 
     var host by remember { mutableStateOf("") }
     var port by remember { mutableStateOf("") }
@@ -110,7 +114,13 @@ fun ShvPane(
                     scope.launch {
                         appSettings.saveConnectionParams(params)
                     }
-                    connectToShvBroker("tcp://${params.host}:${params.port}?user=${params.user}&password=${params.password}")
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            shvClient.connect("tcp://${params.host}:${params.port}?user=${params.user}&password=${params.password}")
+                        } catch (e: Exception) {
+                            Log.e("ShvPane", "Connection error", e)
+                        }
+                    }
                 },
                 modifier = Modifier.align(Alignment.End)
             ) {
@@ -118,7 +128,7 @@ fun ShvPane(
             }
         } else {
             Button(
-                onClick = { disconnectShvBroker() },
+                onClick = { shvClient.close() },
                 modifier = Modifier.align(Alignment.End)
             ) {
                 Text("Disconnect")
