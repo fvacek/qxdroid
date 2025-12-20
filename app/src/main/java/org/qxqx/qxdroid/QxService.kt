@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.qxqx.qxdroid.shv.RpcSignal
 import org.qxqx.qxdroid.shv.ShvClient
@@ -57,6 +58,8 @@ class QxService : Service() {
     private val shvClient = ShvClient()
     val shvConnectionStatus = shvClient.connectionStatus
 
+    private lateinit var appSettings: AppSettings
+
     inner class LocalBinder : Binder() {
         fun getService(): QxService = this@QxService
     }
@@ -66,6 +69,8 @@ class QxService : Service() {
     override fun onCreate() {
         super.onCreate()
         
+        appSettings = AppSettings(this)
+
         siProtocolDecoder = SiProtocolDecoder(
             sendSiFrame = { frame -> serialPortManager.sendDataFrame(frame) },
             onCardRead = { card ->
@@ -92,6 +97,12 @@ class QxService : Service() {
 
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification("Service started"))
+
+        // Auto-connect SHV
+        serviceScope.launch {
+            val params = appSettings.shvConnectionParams.first()
+            connectShv(params)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
