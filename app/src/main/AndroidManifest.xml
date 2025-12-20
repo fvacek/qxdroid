@@ -18,8 +18,8 @@
         android:theme="@style/Theme.QxDroid">
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTop"
             android:exported="true"
-            android:label="@string/app_name"
             android:theme="@style/Theme.QxDroid">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
