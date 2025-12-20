@@ -36,14 +36,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.qxqx.qxdroid.si.ReadOutObject
 
 @Composable
 fun SIReaderPane(
+    viewModel: SiViewModel,
     modifier: Modifier = Modifier,
-    viewModel: SiViewModel = viewModel()
 ) {
     val readLog = viewModel.readLog
     val hexLog = viewModel.hexLog

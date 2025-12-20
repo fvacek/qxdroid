@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hoho.android.usbserial.driver.Cp21xxSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialProber
@@ -41,6 +42,7 @@ private const val usbSerialPortNum: Int = 0
 
 class MainActivity : ComponentActivity() {
 
+    private val shvViewModel: ShvViewModel by viewModels()
     private val siViewModel: SiViewModel by viewModels()
     private lateinit var usbPermissionReceiver: BroadcastReceiver
 
@@ -69,7 +71,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             QxDroidTheme {
-                QxDroidApp()
+                QxDroidApp(siViewModel, shvViewModel)
             }
         }
         handleIntent(intent)
@@ -166,7 +168,10 @@ class MainActivity : ComponentActivity() {
 
 @PreviewScreenSizes
 @Composable
-fun QxDroidApp() {
+fun QxDroidApp(
+    siViewModel: SiViewModel = viewModel(),
+    shvViewModel: ShvViewModel = viewModel()
+) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.SI_READER) }
 
     NavigationSuiteScaffold(
@@ -190,11 +195,13 @@ fun QxDroidApp() {
             when (currentDestination) {
                 AppDestinations.SI_READER -> {
                     SIReaderPane(
-                        modifier = Modifier.padding(innerPadding)
+                        viewModel = siViewModel,
+                        modifier = Modifier.padding(innerPadding),
                     )
                 }
                 AppDestinations.SHV_CLOUD -> {
                     ShvPane(
+                        viewModel = shvViewModel,
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
