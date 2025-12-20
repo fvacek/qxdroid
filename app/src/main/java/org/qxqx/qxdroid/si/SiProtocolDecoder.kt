@@ -1,9 +1,7 @@
 package org.qxqx.qxdroid.si
 
-import android.util.Log
+import timber.log.Timber
 import java.time.LocalDate
-
-private const val TAG = "SiReader"
 
 class SiProtocolDecoder(
     var sendSiFrame: (SiDataFrame) -> Unit,
@@ -15,11 +13,11 @@ class SiProtocolDecoder(
 
     fun onDataFrame(frame: SiDataFrame) {
         try {
-            Log.d(TAG, "onDataFrame: $frame")
+            Timber.d("onDataFrame: $frame")
             val sicmd = toSiRecCommand(frame)
             when (sicmd) {
                 is SiCardDetected -> {
-                    Log.d(TAG, "Card detected: $sicmd")
+                    Timber.d("Card detected: $sicmd")
                     when (sicmd.cardSerie) {
                         CardKind.CARD_5 -> {
                             detectedCardKind = CardKind.CARD_5
@@ -38,7 +36,7 @@ class SiProtocolDecoder(
                         }
 
                         CardKind.TCARD -> {
-                            Log.d(TAG, "TCard detected")
+                            Timber.d("TCard detected")
                         }
 
                         CardKind.SIAC -> {
@@ -47,24 +45,24 @@ class SiProtocolDecoder(
                         }
 
                         CardKind.PCARD -> {
-                            Log.d(TAG, "pCard detected")
+                            Timber.d("pCard detected")
                         }
                     }
                 }
 
                 is SiCardRemoved -> {
-                    Log.d(TAG, "Card removed: $sicmd")
+                    Timber.d("Card removed: $sicmd")
                 }
                 is SiacMeasureBatteryVoltageResp -> {
-                    Log.d(TAG, "SIAC battery voltage read: $sicmd")
+                    Timber.d("SIAC battery voltage read: $sicmd")
                     sendSiFrame(GetSiCard89pRq(3).toSiFrame())
                 }
 
                 is GetSiCardResp -> {
-                    Log.d(TAG, "Card $detectedCardKind read, block number: ${sicmd.blockNumber}")
+                    Timber.d("Card $detectedCardKind read, block number: ${sicmd.blockNumber}")
                     when (detectedCardKind) {
                         CardKind.CARD_5 -> {
-                            Log.d(TAG, "Card5 read: $sicmd")
+                            Timber.d("Card5 read: $sicmd")
                             parseCard5Data(sicmd.data)
                             onCardRead(currentCard!!)
                         }
@@ -103,11 +101,11 @@ class SiProtocolDecoder(
                     }
                 }
                 else -> {
-                    Log.d(TAG, "Unknown command: $sicmd")
+                    Timber.d("Unknown command: $sicmd")
                 }
             }
         } catch (e: Exception) {
-            Log.d(TAG, "SI frame corrupted error: $e")
+            Timber.e(e, "SI frame corrupted error")
         }
     }
     private fun parseCard5Data(data: ByteArray) {
@@ -125,7 +123,6 @@ class SiProtocolDecoder(
             val punchTime = getUInt16(data, offset + 1).toInt()
             val punch = SiPunch(code.toInt(), punchTime)
             punches.add(punch)
-            //Log.d(TAG, "Punch: $punch")
         }
         currentCard = SiCard(
             CardKind.CARD_5,
@@ -156,7 +153,6 @@ class SiProtocolDecoder(
     }
 
     private fun parseCard9Data(blockNumber: Int, data: ByteArray) {
-        //Log.d(TAG, "parseCard9Data, blockNumber: $blockNumber, current card: $currentCard")
         if (blockNumber == 0) {
             val card = parseCard89FirstBlockData(CardKind.CARD_9, data)
             currentCard = card
@@ -193,18 +189,11 @@ class SiProtocolDecoder(
             val mm = getUByte(data, offset + 1).toInt()
             val dd = getUByte(data, offset + 2).toInt()
             val newBatteryDate = LocalDate.of(yy, mm, dd)
-            Log.d(TAG, "SIAC new batery date: $newBatteryDate")
+            Timber.d("SIAC new batery date: $newBatteryDate")
 
             offset = 0x11 * 4
             val mvbat = getUByte(data, offset + 3).toInt()
             // Real battery voltage calculation: 1.9 + (BATT_VOLTAGE * 0.09) /* 1.9V is offset and 0.09 V LSB */
-            // BATT_VOLTAGE
-            // 0x06 ~ 2.44V /* ERROR - under this voltage SIAC does not work as contactless */
-            // 0x09 ~ 2.71V /* WARNING - under this voltage it is time to think about battery exchange */
-            // ...
-            // 0x0B ~ 2.89V
-            // 0x0C ~ 2.98V
-            // 0x0D ~ 3.07V /* the value should not exceed this value */
             val batteryVoltage = 1.9 + (mvbat * 0.09)
 
             offset = 0x15 * 4
@@ -216,7 +205,7 @@ class SiProtocolDecoder(
             // LBAT	low battery indicator:  0xAA - ok, 0x6C – low bat
             val batteryLow = lbat != 0xAA
 
-            Log.d(TAG, "SIAC battery voltage: $batteryVoltage, reference: $batteryReferenceVoltage, low: $batteryLow")
+            Timber.d("SIAC battery voltage: $batteryVoltage, reference: $batteryReferenceVoltage, low: $batteryLow")
 
             card.baterryStatus = SiacBatteryStatus(batteryVoltage, batteryLow, newBatteryDate)
 
@@ -268,4 +257,3 @@ private fun parseCard89FirstBlockData(cardKind: CardKind, data: ByteArray): SiCa
         )
     )
 }
-

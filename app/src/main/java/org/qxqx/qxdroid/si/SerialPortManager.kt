@@ -6,6 +6,8 @@ import com.hoho.android.usbserial.util.SerialInputOutputManager
 import org.qxqx.qxdroid.si.SiDataFrame
 import org.qxqx.qxdroid.bytesToHex
 
+private const val TAG = "SerialPortManager"
+
 class SerialPortManager(
     private val onRawData: (ByteArray) -> Unit,
     private val onDataFrame: (SiDataFrame) -> Unit,
@@ -44,9 +46,8 @@ class SerialPortManager(
     }
 
     fun stop() {
-        Log.d(TAG, "Stopping SerialInputOutputManager.")
+        Log.d(TAG, "Stopping SerialPortManager.")
         serialInputOutputManager?.stop()
-        //serialExecutor.shutdown()
         serialInputOutputManager = null
         port = null
     }
@@ -134,7 +135,6 @@ class SerialPortManager(
     }
 
     companion object {
-        private const val TAG = "SerialProtocolManager"
         private const val STX: Byte = 0x02
         private const val ETX: Byte = 0x03
         private const val ACK: Byte = 0x06

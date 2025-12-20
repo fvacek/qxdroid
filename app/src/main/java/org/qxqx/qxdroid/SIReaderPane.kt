@@ -1,5 +1,6 @@
 package org.qxqx.qxdroid
 
+import androidx.compose.animation.core.copy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -155,7 +157,11 @@ fun ReadActivityLog(
         itemsIndexed(log) { index, activity ->
             Column(
                 modifier = Modifier
-                    .background(if (index % 2 == 0) Color.Transparent else Color(0xFFF0F0F0))
+                    .background(if (index % 2 == 0)
+                        Color.Transparent
+                    else
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
             ) {
                 when (activity) {
                     is ReadOutObject.CardReadObject -> {
