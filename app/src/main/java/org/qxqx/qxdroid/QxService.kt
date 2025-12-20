@@ -99,7 +99,13 @@ class QxService : Service() {
     }
 
     fun connectSi(port: UsbSerialPort, connection: UsbDeviceConnection) {
+        if (usbSerialPort?.device?.deviceName == port.device.deviceName && _siConnectionStatus.value is ConnectionStatus.Connected) {
+            Timber.d("SI already connected to this device")
+            return
+        }
+        
         try {
+            disconnectSi()
             usbConnection = connection
             usbSerialPort = port
             port.open(usbConnection)
@@ -109,6 +115,7 @@ class QxService : Service() {
             serialPortManager.start(port)
             _siConnectionStatus.value = ConnectionStatus.Connected
             updateNotification("SI Connected")
+            Timber.i("SI Connected to ${port.device.deviceName}")
         } catch (e: IOException) {
             disconnectSi("Error: ${e.message}")
         }
@@ -119,7 +126,7 @@ class QxService : Service() {
             serialPortManager.stop()
             usbSerialPort?.close()
             usbConnection?.close()
-        } catch (e: IOException) {
+        } catch (e: Exception) {
             Timber.w(e, "Serial port close failed")
         } finally {
             usbSerialPort = null

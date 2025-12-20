@@ -62,6 +62,9 @@ class MainActivity : ComponentActivity() {
             isBound = true
             shvViewModel.setService(qxService!!)
             siViewModel.setService(qxService!!)
+            
+            // Try to auto-connect once the service is available
+            tryAutoConnect()
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -90,7 +93,6 @@ class MainActivity : ComponentActivity() {
                                 connect(usbDevice)
                             }
                         } else {
-                            // This might need a slightly different handling if we want to show it in UI via service
                             Log.w("MainActivity", "USB Permission denied")
                         }
                     }
@@ -108,7 +110,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun connect(device: UsbDevice) {
-        val service = qxService ?: return
+        val service = qxService ?: run {
+            Log.w("MainActivity", "Cannot connect: Service not bound")
+            return
+        }
         service.disconnectSi()
 
         val usbManager = getSystemService(USB_SERVICE) as UsbManager
@@ -166,6 +171,10 @@ class MainActivity : ComponentActivity() {
         val filter = IntentFilter(ACTION_USB_PERMISSION)
         registerReceiver(usbPermissionReceiver, filter, RECEIVER_NOT_EXPORTED)
 
+        tryAutoConnect()
+    }
+
+    private fun tryAutoConnect() {
         // Only try auto-connect if we aren't already connected/connecting
         if (siViewModel.connectionStatus is ConnectionStatus.Disconnected) {
             val usbManager = getSystemService(USB_SERVICE) as UsbManager
