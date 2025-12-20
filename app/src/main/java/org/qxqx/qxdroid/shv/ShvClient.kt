@@ -28,6 +28,7 @@ import java.io.IOException
 import java.net.Socket
 import java.util.concurrent.ConcurrentHashMap
 import androidx.core.net.toUri
+import timber.log.Timber
 
 private const val TAG = "ShvClient"
 private const val RPC_MSG = "RpcMsg"
@@ -67,9 +68,9 @@ class ShvClient {
                 val password = uri.getQueryParameter("password") ?: throw IllegalArgumentException("No password specified")
 
                 _connectionStatus.value = ConnectionStatus.Connecting("$host:$port")
-                Log.i(TAG, "Connecting to shv broker: $host:$port")
+                Timber.i("Connecting to shv broker: $host:$port")
                 socket = Socket(host, port)
-                Log.i(TAG, "Connected OK")
+                Timber.i("Connected OK")
                 writer = DataOutputStream(socket?.getOutputStream())
                 reader = DataInputStream(socket?.getInputStream())
 
@@ -84,21 +85,21 @@ class ShvClient {
                 val pingIntervalSeconds = 90
                 sendLogin(user, password, nonce, pingIntervalSeconds)
 
-                Log.i(TAG, "Login to shv broker was successful")
+                Timber.i("Login to shv broker was successful")
                 _connectionStatus.value = ConnectionStatus.Connected
                 pingJob = clientScope.launch {
                     while (isActive) {
                         try {
                             callShvMethod(".app", "ping")
                         } catch (e: Exception) {
-                            Log.w(TAG, "Ping failed: ${e.message}")
+                            Timber.w("Ping failed: ${e.message}")
                         }
                         delay(pingIntervalSeconds * 1000L)
                     }
                 }
 
             } catch (e: Exception) {
-                Log.e(TAG, "Connection error", e)
+                Timber.e(e, "Connection error")
                 val errorMessage = e.message ?: "Unknown error"
                 _connectionStatus.value = ConnectionStatus.Disconnected(errorMessage)
                 close()
@@ -108,12 +109,12 @@ class ShvClient {
     }
 
     suspend fun sendHello(): RpcValue {
-        Log.i(TAG, "Sending hello")
+        Timber.i("Sending hello")
         return callShvMethod("", "hello")
     }
 
     suspend fun sendLogin(user: String, password: String, nonce: String, pingIntervalSeconds: Int): RpcValue {
-        Log.i(TAG, "Sending login")
+        Timber.i("Sending login")
         val sha1pwd = sha1(nonce + sha1(password))
 
         val param = RpcValue.Map(
@@ -142,7 +143,7 @@ class ShvClient {
                 it.write(data)
                 it.flush()
             } catch (e: IOException) {
-                Log.e(TAG, "Failed to send data: $e")
+                Timber.e("Failed to send data: $e")
                 close()
             }
         }
@@ -156,7 +157,7 @@ class ShvClient {
         try {
             pendingResponses[requestId] = deferred
             sendMessage(request)
-            Log.d(TAG, "Waiting for response for request: $requestId")
+            Timber.d("Waiting for response for request: $requestId")
 
             val response = withTimeout(5000) {
                 deferred.await()
@@ -165,14 +166,14 @@ class ShvClient {
             return response.resultE()
         } finally {
             // Clean up the map in case of timeout or cancellation
-            Log.i(TAG, "removing request id: $requestId")
+            Timber.i("removing request id: $requestId")
 
             pendingResponses.remove(requestId)
         }
     }
 
     fun sendMessage(msg: RpcMessage) {
-        Log.d(RPC_MSG, "S<== $msg")
+        Timber.tag(RPC_MSG).d("S<== $msg")
         val data = msg.value.toChainPack()
         val ba = ByteArrayOutputStream()
         val writer = ChainPackWriter(ba)
@@ -187,7 +188,7 @@ class ShvClient {
                 try {
                     val frameData = getFrameBytes(reader!!)
                     val msg = RpcMessage.fromData(frameData)
-                    Log.d(RPC_MSG, "R==> $msg")
+                    Timber.tag(RPC_MSG).d("R==> $msg")
                     if (msg is RpcResponse) {
                         // It's a response, find the pending request and complete it.
                         val requestId = msg.requestId()
@@ -200,17 +201,17 @@ class ShvClient {
 
                 } catch (e: ReadException) {
                     if (e.reason == ReadErrorReason.UnexpectedEndOfStream) {
-                        Log.e(TAG, "Socked closed", e)
+                        Timber.e(e, "Socked closed")
                         _connectionStatus.value = ConnectionStatus.Disconnected("Socked closed")
                         break
                     }
-                    Log.e(TAG, "Error processing frame, skipping.", e)
+                    Timber.e(e, "Error processing frame, skipping.")
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error processing frame, skipping.", e)
+                    Timber.e(e, "Error processing frame, skipping.")
                 }
             }
         } finally {
-            Log.i(TAG, "Message listener stopped.")
+            Timber.i("Message listener stopped.")
             // When the listener stops, fail all pending requests.
             pendingResponses.values.forEach { it.cancel() }
             pendingResponses.clear()
@@ -218,7 +219,7 @@ class ShvClient {
     }
 
     fun close() {
-        Log.i(TAG, "Closing connection.")
+        Timber.i("Closing connection.")
         if (_connectionStatus.value !is ConnectionStatus.Disconnected) {
             _connectionStatus.value = ConnectionStatus.Disconnected("Connection closed")
         }
@@ -229,7 +230,7 @@ class ShvClient {
             reader?.close()
             socket?.close()
         } catch (e: IOException) {
-            Log.w(TAG, "Error closing socket resources", e)
+            Timber.w(e, "Error closing socket resources")
         } finally {
             writer = null
             reader = null

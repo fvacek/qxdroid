@@ -15,13 +15,8 @@ class SiViewModel : ViewModel() {
     var connectionStatus by mutableStateOf<ConnectionStatus>(ConnectionStatus.Disconnected("Not connected"))
         private set
 
-    private val siProtocolDecoder: SiProtocolDecoder = SiProtocolDecoder(
-        sendSiFrame = { frame -> serialPortManager.sendDataFrame(frame) },
-        onCardRead = { card ->
-            readLog.add(ReadOutObject.CardReadObject(card))
-        }
-    )
-
+    private var usbConnection: android.hardware.usb.UsbDeviceConnection? = null
+    private var usbSerialPort: UsbSerialPort? = null
     private val serialPortManager: SerialPortManager = SerialPortManager(
         onRawData = { data -> hexLog.add(bytesToHex(data)) },
         onDataFrame = { frame ->
@@ -33,27 +28,37 @@ class SiViewModel : ViewModel() {
         }
     )
 
+    private val siProtocolDecoder: SiProtocolDecoder = SiProtocolDecoder(
+        sendSiFrame = { frame -> serialPortManager.sendDataFrame(frame) },
+        onCardRead = { card ->
+            readLog.add(ReadOutObject.CardReadObject(card))
+        }
+    )
+
     fun setStatus(status: ConnectionStatus) {
         connectionStatus = status
     }
 
-    fun connect(port: UsbSerialPort, usbConnection: android.hardware.usb.UsbDeviceConnection) {
+    fun connect(port: UsbSerialPort, usbConnection1: android.hardware.usb.UsbDeviceConnection) {
         try {
+            usbConnection = usbConnection1
+            usbSerialPort = port
             port.open(usbConnection)
             port.setParameters(38400, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+            port.dtr = true
+            port.rts = true
             serialPortManager.start(port)
             connectionStatus = ConnectionStatus.Connected
         } catch (e: IOException) {
-            connectionStatus = ConnectionStatus.Disconnected("Error: ${e.message}")
-            serialPortManager.stop()
+            disconnect("Error: ${e.message}")
         }
     }
 
-    fun disconnect() {
+    fun disconnect(error: String? = null) {
         serialPortManager.stop()
-        if (connectionStatus !is ConnectionStatus.Disconnected) {
-            connectionStatus = ConnectionStatus.Disconnected("Disconnected")
-        }
+        usbSerialPort?.close()
+        usbConnection?.close()
+        connectionStatus = ConnectionStatus.Disconnected(error?:"Disconnected")
     }
 
     fun clearLogs() {
@@ -70,6 +75,6 @@ class SiViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        serialPortManager.stop()
+        disconnect()
     }
 }

@@ -5,8 +5,7 @@ import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.util.SerialInputOutputManager
 import org.qxqx.qxdroid.si.SiDataFrame
 import org.qxqx.qxdroid.bytesToHex
-
-private const val TAG = "SerialPortManager"
+import timber.log.Timber
 
 class SerialPortManager(
     private val onRawData: (ByteArray) -> Unit,
@@ -16,12 +15,10 @@ class SerialPortManager(
 
     private val dataBuffer = mutableListOf<Byte>()
     private var serialInputOutputManager: SerialInputOutputManager? = null
-    private var port: UsbSerialPort? = null
-    //private val serialExecutor = Executors.newSingleThreadExecutor()
 
     fun sendDataFrame(frame: SiDataFrame) {
         val data = frame.toByteArray()
-        Log.d(TAG, "Sending data frame: ${bytesToHex(data)}.")
+        Timber.d("Sending data frame: ${bytesToHex(data)}.")
         serialInputOutputManager?.writeAsync(data)
         //port?.let { p ->
         //    serialExecutor.submit {
@@ -38,29 +35,30 @@ class SerialPortManager(
 
     fun start(port: UsbSerialPort) {
         if (serialInputOutputManager == null) {
-            Log.d(TAG, "Starting SerialInputOutputManager in binary mode.")
-            this.port = port
+            Timber.d("Starting SerialInputOutputManager in binary mode.")
             serialInputOutputManager = SerialInputOutputManager(port, this)
             serialInputOutputManager?.start()
         }
     }
 
     fun stop() {
-        Log.d(TAG, "Stopping SerialPortManager.")
-        serialInputOutputManager?.stop()
+        Timber.d("Stopping SerialPortManager.")
+        serialInputOutputManager?.let {
+            it.listener = null
+            it.stop()
+        }
         serialInputOutputManager = null
-        port = null
     }
 
     override fun onNewData(data: ByteArray) {
-        Log.d(TAG, "Serial data received ${data.size} bytes: ${bytesToHex(data)}")
+        Timber.d("Serial data received ${data.size} bytes: ${bytesToHex(data)}")
         onRawData(data)
         dataBuffer.addAll(data.toList())
         processDataBuffer()
     }
 
     override fun onRunError(e: Exception) {
-        Log.e(TAG, "SerialPort Error", e)
+        Timber.e(e, "SerialPort Error")
         onError(e)
     }
 
@@ -77,7 +75,7 @@ class SerialPortManager(
 
             // Discard any data before STX
             if (stxIndex > 0) {
-                Log.d(TAG, "processDataBuffer: Discarding $stxIndex bytes before STX.")
+                Timber.d("processDataBuffer: Discarding $stxIndex bytes before STX.")
                 dataBuffer.subList(0, stxIndex).clear()
             }
 
@@ -91,7 +89,7 @@ class SerialPortManager(
             val command = dataBuffer[1]
             if (command.toInt() and 0xFF < 0x80) {
                 val msg = "Unsupported frame (CMD < 0x80): ${bytesToHex(byteArrayOf(command))}"
-                Log.w(TAG, "processDataBuffer: Unsupported frame (CMD < 0x80), discarding STX.")
+                Timber.w("processDataBuffer: Unsupported frame (CMD < 0x80), discarding STX.")
                 dataBuffer.removeAt(0) // Discard STX and continue
                 continue
             }
@@ -108,7 +106,7 @@ class SerialPortManager(
             // Check for ETX at the end of the frame
             if (dataBuffer[frameLength - 1] != ETX) {
                 val msg = "Malformed frame (bad ETX). Discarding STX."
-                Log.w(TAG, "processDataBuffer: Malformed frame (bad ETX). Discarding STX.")
+                Timber.w("processDataBuffer: Malformed frame (bad ETX). Discarding STX.")
                 dataBuffer.removeAt(0) // Discard STX and retry
                 continue
             }
@@ -127,10 +125,10 @@ class SerialPortManager(
     private fun parseFrame(frame: ByteArray) {
         try {
             val dataFrame = SiDataFrame.Companion.fromData(frame)
-            Log.i(TAG, "New frame: $dataFrame")
+            Timber.i("New frame: $dataFrame")
             onDataFrame(dataFrame)
         } catch (e: Exception) {
-            Log.e(TAG, "parseAndLogFrame: Error parsing frame: ${e.message}")
+            Timber.e("parseAndLogFrame: Error parsing frame: ${e.message}")
         }
     }
 

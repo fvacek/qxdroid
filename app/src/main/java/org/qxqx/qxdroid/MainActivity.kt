@@ -9,6 +9,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -47,6 +48,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var usbPermissionReceiver: BroadcastReceiver
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Log.i("MainActivity", "onCreate()")
         super.onCreate(savedInstanceState)
 
         usbPermissionReceiver = object : BroadcastReceiver() {
@@ -78,6 +80,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun connect(device: UsbDevice) {
+        siViewModel.disconnect()
+
         val usbManager = getSystemService(USB_SERVICE) as UsbManager
         siViewModel.setStatus(ConnectionStatus.Connecting("USB OTG"))
         var driver: UsbSerialDriver? = UsbSerialProber.getDefaultProber().probeDevice(device)
@@ -128,33 +132,40 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onNewIntent(intent: Intent) {
+        Log.i("MainActivity", "onNewIntent()")
         super.onNewIntent(intent)
         handleIntent(intent)
     }
 
     override fun onResume() {
+        Log.i("MainActivity", "onResume()")
         super.onResume()
         val filter = IntentFilter(ACTION_USB_PERMISSION)
+        // Use RECEIVER_NOT_EXPORTED for safety on newer Android versions
         registerReceiver(usbPermissionReceiver, filter, RECEIVER_NOT_EXPORTED)
 
-        // Try to connect if a device is already attached
-        val usbManager = getSystemService(USB_SERVICE) as UsbManager
-        val prober = UsbSerialProber.getDefaultProber()
-        for (device in usbManager.deviceList.values) {
-            val driver = prober.probeDevice(device) ?: if (device.vendorId == 0x10C4) Cp21xxSerialDriver(device) else null
-            if (driver != null) {
-                connect(device)
-                break
+        // Only try auto-connect if we aren't already connected/connecting
+        if (siViewModel.connectionStatus is ConnectionStatus.Disconnected) {
+            val usbManager = getSystemService(USB_SERVICE) as UsbManager
+            val prober = UsbSerialProber.getDefaultProber()
+            for (device in usbManager.deviceList.values) {
+                val driver = prober.probeDevice(device) ?: if (device.vendorId == 0x10C4) Cp21xxSerialDriver(device) else null
+                if (driver != null) {
+                    connect(device)
+                    break
+                }
             }
         }
     }
 
     override fun onPause() {
+        Log.i("MainActivity", "onPause()")
         super.onPause()
         unregisterReceiver(usbPermissionReceiver)
     }
 
     override fun onStop() {
+        Log.i("MainActivity", "onStop()")
         super.onStop()
         if (!isChangingConfigurations) {
             siViewModel.disconnect()
