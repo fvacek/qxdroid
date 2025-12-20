@@ -18,7 +18,7 @@ class SiProtocolDecoder(
             when (sicmd) {
                 is SiCardDetected -> {
                     Timber.d("Card detected: $sicmd")
-                    when (sicmd.cardSerie) {
+                    when (sicmd.cardKind) {
                         CardKind.CARD_5 -> {
                             detectedCardKind = CardKind.CARD_5
                             sendSiFrame(GetSiCard5Rq().toSiFrame())
@@ -207,7 +207,7 @@ class SiProtocolDecoder(
 
             Timber.d("SIAC battery voltage: $batteryVoltage, reference: $batteryReferenceVoltage, low: $batteryLow")
 
-            card.baterryStatus = SiacBatteryStatus(batteryVoltage, batteryLow, newBatteryDate)
+            card.baterry = SiacBatteryStatus(batteryVoltage, batteryLow, newBatteryDate)
 
             return
         }

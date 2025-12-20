@@ -18,13 +18,13 @@ class SiCommandTest {
         val testCases = listOf(
             // Example expected values — replace with your real ones
             "02 e5 06 00 04 00 00 10 e9 37 8c 03" to SiCardDetected(
-                cardSerie = CardKind.CARD_5,
+                cardKind = CardKind.CARD_5,
                 stationNumber = 4u,
                 cardNumber = 4329uL
             ),
 
             "02 e8 06 00 04 01 16 f5 7f af e2 03" to SiCardDetected(
-                cardSerie = CardKind.CARD_9,
+                cardKind = CardKind.CARD_9,
                 stationNumber = 4u,
                 cardNumber = 1504639uL
             )

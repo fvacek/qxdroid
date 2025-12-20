@@ -81,7 +81,11 @@ open class RpcMessage(
     fun setParam(param: RpcValue?) = apply {
         val map = (value as? RpcValue.IMap)?.value ?: throw IllegalStateException("RpcMessage value is not an IMap")
         if (map is MutableMap) {
-            map[Key.Params.value] = param ?: RpcValue.Null()
+            if (param == null) {
+                map.remove(Key.Params.value)
+            } else {
+                map[Key.Params.value] = param
+            }
         }
     }
 
@@ -196,6 +200,36 @@ class RpcResponse(value: RpcValue) : RpcMessage(value) {
         val code = errmap.get(ErrorKey.Code.value)?.toInt()?.toInt()
         val message = errmap.get(ErrorKey.Message.value)?.toString()
         return RpcError(RpcErrorCode.entries[code?: 0], message?: "Unknown error")
+    }
+}
+
+class RpcSignal(value: RpcValue) : RpcMessage(value) {
+
+    constructor(
+        path: String,
+        method: String?,
+        signal: String,
+        param: RpcValue? = null,
+        userId: String? = null, // Note: userId was not used in your original constructor logic.
+    ) : this(createRpcValue(path, method, signal, param, userId))
+
+    companion object {
+        private fun createRpcValue(
+            path: String,
+            method: String?,
+            signal: String,
+            param: RpcValue?,
+            userId: String?,
+        ): RpcValue {
+            val msg = RpcMessage()
+            msg.setShvPath(path)
+            if (method != null) {
+                msg.setMethod(method)
+            }
+            msg.setParam(param)
+            msg.setUserId(userId)
+            return msg.value
+        }
     }
 }
 

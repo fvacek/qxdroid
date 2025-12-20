@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import org.qxqx.qxdroid.shv.ShvViewModel
 
 @Composable
 fun ShvPane(
@@ -144,7 +145,7 @@ fun PasswordTextField(
 
             val description = if (passwordVisible) "Hide password" else "Show password"
 
-            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+            IconButton(onClick = { !passwordVisible }) {
                 Icon(imageVector = icon, contentDescription = description)
             }
         }

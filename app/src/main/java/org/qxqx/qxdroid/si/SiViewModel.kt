@@ -1,21 +1,29 @@
-package org.qxqx.qxdroid
+package org.qxqx.qxdroid.si
 
-import androidx.compose.runtime.getValue
+import android.hardware.usb.UsbDeviceConnection
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.hoho.android.usbserial.driver.UsbSerialPort
-import org.qxqx.qxdroid.si.*
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.launch
+import org.qxqx.qxdroid.ConnectionStatus
+import org.qxqx.qxdroid.bytesToHex
 import java.io.IOException
 
 class SiViewModel : ViewModel() {
-    val readLog = mutableStateListOf<ReadOutObject>()
+    val readOutLog = mutableStateListOf<SiReadOut>()
+    private val _readOutEvents = MutableSharedFlow<SiReadOut>()
+    val readOutEvents = _readOutEvents.asSharedFlow()
     val hexLog = mutableStateListOf<String>()
     var connectionStatus by mutableStateOf<ConnectionStatus>(ConnectionStatus.Disconnected("Not connected"))
         private set
 
-    private var usbConnection: android.hardware.usb.UsbDeviceConnection? = null
+    private var usbConnection: UsbDeviceConnection? = null
     private var usbSerialPort: UsbSerialPort? = null
     private val serialPortManager: SerialPortManager = SerialPortManager(
         onRawData = { data -> hexLog.add(bytesToHex(data)) },
@@ -31,7 +39,12 @@ class SiViewModel : ViewModel() {
     private val siProtocolDecoder: SiProtocolDecoder = SiProtocolDecoder(
         sendSiFrame = { frame -> serialPortManager.sendDataFrame(frame) },
         onCardRead = { card ->
-            readLog.add(ReadOutObject.CardReadObject(card))
+            val readOut = SiReadOut.Card(card)
+            readOutLog.add(readOut)
+            // 2. Broadcast the event
+            viewModelScope.launch {
+                _readOutEvents.emit(readOut)
+            }
         }
     )
 
@@ -39,7 +52,7 @@ class SiViewModel : ViewModel() {
         connectionStatus = status
     }
 
-    fun connect(port: UsbSerialPort, usbConnection1: android.hardware.usb.UsbDeviceConnection) {
+    fun connect(port: UsbSerialPort, usbConnection1: UsbDeviceConnection) {
         try {
             usbConnection = usbConnection1
             usbSerialPort = port
@@ -62,14 +75,17 @@ class SiViewModel : ViewModel() {
     }
 
     fun clearLogs() {
-        readLog.clear()
+        readOutLog.clear()
         hexLog.clear()
     }
 
     private fun logDataFrame(dataFrame: SiDataFrame) {
         val cmd = toSiRecCommand(dataFrame)
-        if (cmd is SiCardDetected || cmd is SiCardRemoved) {
-            readLog.add(ReadOutObject.Command(cmd))
+        if (cmd is SiCardDetected) {
+            readOutLog.add(SiReadOut.CardDetected(cmd))
+        }
+        else if (cmd is SiCardRemoved) {
+            readOutLog.add(SiReadOut.CardRemoved(cmd))
         }
     }
 

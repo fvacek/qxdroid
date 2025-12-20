@@ -1,6 +1,5 @@
 package org.qxqx.qxdroid
 
-import androidx.compose.animation.core.copy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -39,14 +38,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import org.qxqx.qxdroid.si.ReadOutObject
+import org.qxqx.qxdroid.si.SiReadOut
+import org.qxqx.qxdroid.si.SiViewModel
 
 @Composable
 fun SIReaderPane(
     viewModel: SiViewModel,
     modifier: Modifier = Modifier,
 ) {
-    val readLog = viewModel.readLog
+    val readLog = viewModel.readOutLog
     val hexLog = viewModel.hexLog
     val connectionStatus = viewModel.connectionStatus
 
@@ -147,7 +147,7 @@ fun SIReaderPane(
 
 @Composable
 fun ReadActivityLog(
-    log: List<ReadOutObject>,
+    log: List<SiReadOut>,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState()
 ) {
@@ -164,7 +164,7 @@ fun ReadActivityLog(
                     )
             ) {
                 when (activity) {
-                    is ReadOutObject.CardReadObject -> {
+                    is SiReadOut.Card -> {
                         val card = activity.card
                         val isExpanded = expandedItemIndex == index
 
@@ -205,20 +205,32 @@ fun ReadActivityLog(
                                         modifier = Modifier.padding(start = 16.dp)
                                     )
                                 }
-                                if (card.baterryStatus != null) {
+                                if (card.baterry != null) {
                                     Text(
-                                        text = "Battery: ${"%.2f".format(card.baterryStatus!!.baterryVoltage)}V, Low: ${card.baterryStatus!!.baterryLow}"
+                                        text = "Battery: ${"%.2f".format(card.baterry!!.voltage)}V, Low: ${card.baterry!!.isLow}"
                                     )
                                     Text(
-                                        text = "Battery replace date: ${card.baterryStatus!!.batteryReplaceDate}"
+                                        text = "Battery replace date: ${card.baterry!!.replaceDate}"
                                     )
                                 }
                             }
                         }
                     }
-                    is ReadOutObject.Command -> {
+                    is SiReadOut.CardDetected -> {
                         Text(
                             text = activity.command.toString(),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    is SiReadOut.CardRemoved -> {
+                        Text(
+                            text = activity.command.toString(),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    is SiReadOut.Punch -> {
+                        Text(
+                            text = activity.toString(),
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
                     }

@@ -2,7 +2,7 @@ package org.qxqx.qxdroid.shv
 
 // import android.util.Log
 import org.qxqx.qxdroid.bytesToHex
-import org.qxqx.qxdroid.shv.RpcValue.Int
+import org.qxqx.qxdroid.si.CardKind
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream

@@ -1,6 +1,5 @@
 package org.qxqx.qxdroid.shv
 
-import android.R
 import org.junit.Test
 import org.junit.Assert.*
 import org.qxqx.qxdroid.bytesFromHex

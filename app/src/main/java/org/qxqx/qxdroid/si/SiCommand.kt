@@ -1,6 +1,7 @@
 package org.qxqx.qxdroid.si
 
 import org.qxqx.qxdroid.bytesFromHex
+import org.qxqx.qxdroid.shv.RpcValue
 import org.qxqx.qxdroid.timeToString
 import java.time.LocalDate
 
@@ -39,12 +40,12 @@ enum class CardKind(val code: UInt) {
 sealed class SiRecCommand()
 
 data class SiCardDetected(
-    val cardSerie: CardKind,
+    val cardKind: CardKind,
     val stationNumber: UInt,
     val cardNumber: ULong,
 ) : SiRecCommand() {
     override fun toString(): String {
-        return "Detected: $cardSerie, $cardNumber sn: $stationNumber"
+        return "Detected: $cardKind, $cardNumber sn: $stationNumber"
     }
 }
 
@@ -61,13 +62,33 @@ data class SiCardRemoved(
 data class SiPunch(
     var code: Int,
     var time: Int,
-)
+) {
+    fun toRpcValue(): RpcValue {
+        return RpcValue.Map(
+            mapOf(
+                "code" to RpcValue.Int(code),
+                "time" to RpcValue.Int(time),
+            )
+        )
+    }
+}
+
 
 data class SiacBatteryStatus(
-    val baterryVoltage: Double,
-    val baterryLow: Boolean,
-    val batteryReplaceDate: LocalDate,
-)
+    val voltage: Double,
+    val isLow: Boolean,
+    val replaceDate: LocalDate,
+) {
+    fun toRpcValue(): RpcValue {
+        return RpcValue.Map(
+            mapOf(
+                "voltage" to RpcValue.Double(voltage),
+                "isLow" to RpcValue.Bool(isLow),
+                "replaceDate" to RpcValue.String(replaceDate.toString()),
+            )
+        )
+    }
+}
 data class SiCard(
     val cardKind: CardKind,
     val cardSerie: Int,
@@ -77,7 +98,24 @@ data class SiCard(
     val finishTime: Int,
     val punches: Array<SiPunch>,
 ) : SiRecCommand() {
-    var baterryStatus: SiacBatteryStatus? = null
+    var baterry: SiacBatteryStatus? = null
+
+    fun toRpcValue(): RpcValue {
+        return RpcValue.Map(
+            mapOf(
+                "cardKind" to RpcValue.String(cardKind.toString()),
+                "cardSerie" to RpcValue.Int(cardSerie),
+                "cardNumber" to RpcValue.Int(cardNumber),
+                "checkTime" to RpcValue.Int(checkTime),
+                "startTime" to RpcValue.Int(startTime),
+                "finishTime" to RpcValue.Int(finishTime),
+                "punches" to RpcValue.List(punches.map { punch ->
+                    punch.toRpcValue()
+                }),
+                "battery" to (baterry?.toRpcValue() ?: RpcValue.Null()),
+            )
+        )
+    }
 
     override fun toString(): String {
         var punchesStr = ""

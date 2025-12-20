@@ -1,6 +1,5 @@
 package org.qxqx.qxdroid.shv
 
-import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +29,6 @@ import java.util.concurrent.ConcurrentHashMap
 import androidx.core.net.toUri
 import timber.log.Timber
 
-private const val TAG = "ShvClient"
 private const val RPC_MSG = "RpcMsg"
 
 class RpcException(message: String) : Exception(message)

@@ -38,6 +38,9 @@ import com.hoho.android.usbserial.driver.Cp21xxSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import org.qxqx.qxdroid.ui.theme.QxDroidTheme
+import androidx.lifecycle.lifecycleScope
+import org.qxqx.qxdroid.shv.ShvViewModel
+import org.qxqx.qxdroid.si.SiViewModel
 
 private const val usbSerialPortNum: Int = 0
 
@@ -50,6 +53,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.i("MainActivity", "onCreate()")
         super.onCreate(savedInstanceState)
+
+        // Start bridging the Si events to the SHV client
+        shvViewModel.observeAndPublishSiData(
+            scope = lifecycleScope,
+            source = siViewModel.readOutEvents
+        )
 
         usbPermissionReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
