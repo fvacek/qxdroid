@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import org.qxqx.qxdroid.ConnectionStatus
 import org.qxqx.qxdroid.bytesToHex
+import timber.log.Timber
 import java.io.IOException
 
 class SiViewModel : ViewModel() {
@@ -68,10 +69,17 @@ class SiViewModel : ViewModel() {
     }
 
     fun disconnect(error: String? = null) {
-        serialPortManager.stop()
-        usbSerialPort?.close()
-        usbConnection?.close()
-        connectionStatus = ConnectionStatus.Disconnected(error?:"Disconnected")
+        try {
+            serialPortManager.stop()
+            usbSerialPort?.close()
+            usbConnection?.close()
+        } catch (e: IOException) {
+            // Log it, but don't crash.
+            // "Already closed" is a common state here.
+            Timber.w(e, "Serial port close failed")
+        } finally {
+            connectionStatus = ConnectionStatus.Disconnected(error?:"Disconnected")
+        }
     }
 
     fun clearLogs() {
