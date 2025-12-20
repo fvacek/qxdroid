@@ -8,7 +8,6 @@ import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -38,10 +37,11 @@ import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import org.qxqx.qxdroid.ui.theme.QxDroidTheme
 
+private const val usbSerialPortNum: Int = 0
+
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: SiViewModel by viewModels()
-    private var portNum: Int = 0
+    private val siViewModel: SiViewModel by viewModels()
     private lateinit var usbPermissionReceiver: BroadcastReceiver
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
                                 connect(usbDevice)
                             }
                         } else {
-                            viewModel.setStatus(ConnectionStatus.Disconnected("Permission denied"))
+                            siViewModel.setStatus(ConnectionStatus.Disconnected("Permission denied"))
                         }
                     }
                 }
@@ -77,26 +77,26 @@ class MainActivity : ComponentActivity() {
 
     private fun connect(device: UsbDevice) {
         val usbManager = getSystemService(USB_SERVICE) as UsbManager
-        viewModel.setStatus(ConnectionStatus.Connecting("USB OTG"))
+        siViewModel.setStatus(ConnectionStatus.Connecting("USB OTG"))
         var driver: UsbSerialDriver? = UsbSerialProber.getDefaultProber().probeDevice(device)
         if (driver == null) {
             if (device.vendorId == 0x10C4) {
-                viewModel.setStatus(ConnectionStatus.Connecting("VID 10c4 detected, trying manual driver..."))
+                siViewModel.setStatus(ConnectionStatus.Connecting("VID 10c4 detected, trying manual driver..."))
                 driver = Cp21xxSerialDriver(device)
             } else {
-                viewModel.setStatus(ConnectionStatus.Disconnected("No driver found"))
+                siViewModel.setStatus(ConnectionStatus.Disconnected("No driver found"))
                 return
             }
         }
 
         if (driver.ports.isEmpty()) {
-            viewModel.setStatus(ConnectionStatus.Disconnected("No ports"))
+            siViewModel.setStatus(ConnectionStatus.Disconnected("No ports"))
             return
         }
-        val usbSerialPort = driver.ports[portNum]
+        val usbSerialPort = driver.ports[usbSerialPortNum]
         val usbConnection: UsbDeviceConnection? = usbManager.openDevice(driver.device)
         if (usbConnection == null && !usbManager.hasPermission(driver.device)) {
-            viewModel.setStatus(ConnectionStatus.Connecting("Permission pending"))
+            siViewModel.setStatus(ConnectionStatus.Connecting("Permission pending"))
             val usbPermissionIntent = PendingIntent.getBroadcast(
                 this,
                 0,
@@ -108,23 +108,18 @@ class MainActivity : ComponentActivity() {
         }
 
         if (usbConnection == null) {
-            viewModel.setStatus(ConnectionStatus.Disconnected("Cannot open device"))
+            siViewModel.setStatus(ConnectionStatus.Disconnected("Cannot open device"))
             return
         }
 
-        viewModel.connect(usbSerialPort, usbConnection)
+        siViewModel.connect(usbSerialPort, usbConnection)
     }
 
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
-            val device: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val device: UsbDevice? =
                 intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
-            }
             device?.let {
-                portNum = 0
                 connect(it)
             }
         }
@@ -146,7 +141,6 @@ class MainActivity : ComponentActivity() {
         for (device in usbManager.deviceList.values) {
             val driver = prober.probeDevice(device) ?: if (device.vendorId == 0x10C4) Cp21xxSerialDriver(device) else null
             if (driver != null) {
-                this.portNum = 0
                 connect(device)
                 break
             }
@@ -161,7 +155,7 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         if (!isChangingConfigurations) {
-            viewModel.disconnect()
+            siViewModel.disconnect()
         }
     }
 
