@@ -5,6 +5,10 @@
     <uses-feature android:name="android.hardware.usb.host" />
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".QxDroidApplication"
@@ -36,6 +40,12 @@
                 android:resource="@xml/device_filter" />
 
         </activity>
+
+        <service
+            android:name=".QxService"
+            android:foregroundServiceType="connectedDevice|dataSync"
+            android:exported="false" />
+
     </application>
 
 </manifest>

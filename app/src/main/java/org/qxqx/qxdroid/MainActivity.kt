@@ -2,13 +2,16 @@ package org.qxqx.qxdroid
 
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.ServiceConnection
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.os.Bundle
+import android.os.IBinder
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -38,7 +41,6 @@ import com.hoho.android.usbserial.driver.Cp21xxSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import org.qxqx.qxdroid.ui.theme.QxDroidTheme
-import androidx.lifecycle.lifecycleScope
 import org.qxqx.qxdroid.shv.ShvViewModel
 import org.qxqx.qxdroid.si.SiViewModel
 
@@ -50,15 +52,31 @@ class MainActivity : ComponentActivity() {
     private val siViewModel: SiViewModel by viewModels()
     private lateinit var usbPermissionReceiver: BroadcastReceiver
 
+    private var qxService: QxService? = null
+    private var isBound = false
+
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as QxService.LocalBinder
+            qxService = binder.getService()
+            isBound = true
+            shvViewModel.setService(qxService!!)
+            siViewModel.setService(qxService!!)
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            isBound = false
+            qxService = null
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.i("MainActivity", "onCreate()")
         super.onCreate(savedInstanceState)
 
-        // Start bridging the Si events to the SHV client
-        shvViewModel.observeAndPublishSiData(
-            scope = lifecycleScope,
-            source = siViewModel.readOutEvents
-        )
+        val serviceIntent = Intent(this, QxService::class.java)
+        startForegroundService(serviceIntent)
+        bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
 
         usbPermissionReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
@@ -72,7 +90,8 @@ class MainActivity : ComponentActivity() {
                                 connect(usbDevice)
                             }
                         } else {
-                            siViewModel.setStatus(ConnectionStatus.Disconnected("Permission denied"))
+                            // This might need a slightly different handling if we want to show it in UI via service
+                            Log.w("MainActivity", "USB Permission denied")
                         }
                     }
                 }
@@ -89,29 +108,25 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun connect(device: UsbDevice) {
-        siViewModel.disconnect()
+        val service = qxService ?: return
+        service.disconnectSi()
 
         val usbManager = getSystemService(USB_SERVICE) as UsbManager
-        siViewModel.setStatus(ConnectionStatus.Connecting("USB OTG"))
         var driver: UsbSerialDriver? = UsbSerialProber.getDefaultProber().probeDevice(device)
         if (driver == null) {
             if (device.vendorId == 0x10C4) {
-                siViewModel.setStatus(ConnectionStatus.Connecting("VID 10c4 detected, trying manual driver..."))
                 driver = Cp21xxSerialDriver(device)
             } else {
-                siViewModel.setStatus(ConnectionStatus.Disconnected("No driver found"))
                 return
             }
         }
 
         if (driver.ports.isEmpty()) {
-            siViewModel.setStatus(ConnectionStatus.Disconnected("No ports"))
             return
         }
         val usbSerialPort = driver.ports[usbSerialPortNum]
         val usbConnection: UsbDeviceConnection? = usbManager.openDevice(driver.device)
         if (usbConnection == null && !usbManager.hasPermission(driver.device)) {
-            siViewModel.setStatus(ConnectionStatus.Connecting("Permission pending"))
             val usbPermissionIntent = PendingIntent.getBroadcast(
                 this,
                 0,
@@ -123,11 +138,10 @@ class MainActivity : ComponentActivity() {
         }
 
         if (usbConnection == null) {
-            siViewModel.setStatus(ConnectionStatus.Disconnected("Cannot open device"))
             return
         }
 
-        siViewModel.connect(usbSerialPort, usbConnection)
+        service.connectSi(usbSerialPort, usbConnection)
     }
 
     private fun handleIntent(intent: Intent?) {
@@ -150,7 +164,6 @@ class MainActivity : ComponentActivity() {
         Log.i("MainActivity", "onResume()")
         super.onResume()
         val filter = IntentFilter(ACTION_USB_PERMISSION)
-        // Use RECEIVER_NOT_EXPORTED for safety on newer Android versions
         registerReceiver(usbPermissionReceiver, filter, RECEIVER_NOT_EXPORTED)
 
         // Only try auto-connect if we aren't already connected/connecting
@@ -173,11 +186,11 @@ class MainActivity : ComponentActivity() {
         unregisterReceiver(usbPermissionReceiver)
     }
 
-    override fun onStop() {
-        Log.i("MainActivity", "onStop()")
-        super.onStop()
-        if (!isChangingConfigurations) {
-            siViewModel.disconnect()
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isBound) {
+            unbindService(serviceConnection)
+            isBound = false
         }
     }
 
