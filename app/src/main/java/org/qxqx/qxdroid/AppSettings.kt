@@ -73,6 +73,7 @@ class AppSettings(context: Context) {
             prefs[ShvConnectionKeys.PORT] = params.port
             prefs[ShvConnectionKeys.USER] = params.user
             prefs[ShvConnectionKeys.PASSWORD] = params.password
+            prefs[ShvConnectionKeys.API_TOKEN] = params.apiToken
         }
     }
 

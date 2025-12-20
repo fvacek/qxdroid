@@ -21,43 +21,35 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 
 @Composable
 fun ShvPane(
     viewModel: ShvViewModel,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val appSettings = remember { AppSettings(context) }
-    val scope = rememberCoroutineScope()
-    
     val connectionStatus by viewModel.connectionStatus.collectAsState()
+    val connectionParams by viewModel.connectionParams.collectAsState()
 
-    var host by remember { mutableStateOf("") }
-    var port by remember { mutableStateOf("") }
-    var user by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var apiToken by remember { mutableStateOf("") }
+    var host by remember { mutableStateOf(connectionParams.host) }
+    var port by remember { mutableStateOf(connectionParams.port) }
+    var user by remember { mutableStateOf(connectionParams.user) }
+    var password by remember { mutableStateOf(connectionParams.password) }
+    var apiToken by remember { mutableStateOf(connectionParams.apiToken) }
 
-    LaunchedEffect(Unit) {
-        val params = appSettings.shvConnectionParams.first()
-        host = params.host
-        port = params.port
-        user = params.user
-        password = params.password
-        apiToken = params.apiToken
+    LaunchedEffect(connectionParams) {
+        host = connectionParams.host
+        port = connectionParams.port
+        user = connectionParams.user
+        password = connectionParams.password
+        apiToken = connectionParams.apiToken
     }
 
     Column(
@@ -108,9 +100,6 @@ fun ShvPane(
             Button(
                 onClick = {
                     val params = ShvConnectionParams(host, port, user, password, apiToken)
-                    scope.launch {
-                        appSettings.saveConnectionParams(params)
-                    }
                     viewModel.connect(params)
                 },
                 modifier = Modifier.align(Alignment.End)

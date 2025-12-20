@@ -1,12 +1,8 @@
 package org.qxqx.qxdroid.si
 
 import org.qxqx.qxdroid.bytesFromHex
-import org.qxqx.qxdroid.shv.RpcValue
 import org.qxqx.qxdroid.timeToString
 import java.time.LocalDate
-import java.util.Date
-
-private const val TAG = "SiCommand"
 
 enum class SiCmd(val code: Int) {
     INVALID(0),
@@ -83,15 +79,13 @@ data class SiCard(
 ) : SiRecCommand() {
     var baterryStatus: SiacBatteryStatus? = null
 
-    constructor() : this(CardKind.CARD_5, 0, 0, 0, 0, 0, arrayOf())
-
     override fun toString(): String {
         var punchesStr = ""
         var no = 0
         punches.forEach { punch ->
             run {
                 no += 1
-                punchesStr += "\n%4d. %4d    %s".format(no, punch.code.toInt(),
+                punchesStr += "\n%4d. %4d    %s".format(no, punch.code,
                     timeToString(punch.time)
                 )
             }
@@ -132,16 +126,16 @@ private fun parseDataLayoutCardDetectedRemoved(data: ByteArray): Triple<CardKind
 }
 
 fun toSiRecCommand(frame: SiDataFrame): SiRecCommand {
-    return when (frame.command) {
-        SiCmd.CARD_REMOVED.code -> {
+    return when (SiCmd.fromCode(frame.command)) {
+        SiCmd.CARD_REMOVED -> {
             val (cardSerie, stationNumber, cardNumber) = parseDataLayoutCardDetectedRemoved(frame.data)
             SiCardRemoved(cardSerie, stationNumber, cardNumber)
         }
-        SiCmd.CARD_DETECTED_5.code, SiCmd.CARD_DETECTED_8.code -> {
+        SiCmd.CARD_DETECTED_5, SiCmd.CARD_DETECTED_8 -> {
             val (cardSerie, stationNumber, cardNumber) = parseDataLayoutCardDetectedRemoved(frame.data)
             SiCardDetected(cardSerie, stationNumber, cardNumber)
         }
-        SiCmd.GET_CARD_5.code -> {
+        SiCmd.GET_CARD_5 -> {
             // STX, 0xB1, 0x82,
             // CN1, CN0,
             // 128 byte,
@@ -154,7 +148,7 @@ fun toSiRecCommand(frame: SiDataFrame): SiRecCommand {
             assert(data.size == 128)
             GetSiCardResp(stationNumber, 0, data)
         }
-        SiCmd.GET_CARD_8.code -> {
+        SiCmd.GET_CARD_8 -> {
             // STX, 0xEF, 0x83,
             // CN1, CN0,
             // BN
@@ -169,7 +163,7 @@ fun toSiRecCommand(frame: SiDataFrame): SiRecCommand {
             assert(data.size == 128)
             GetSiCardResp(stationNumber, blockNumber, data)
         }
-        SiCmd.SIAC_MEASURE_BATTERY.code -> {
+        SiCmd.SIAC_MEASURE_BATTERY -> {
             SiacMeasureBatteryVoltageResp()
         }
         else -> throw IllegalArgumentException("Unknown command 0x${frame.command.toString(16)}")

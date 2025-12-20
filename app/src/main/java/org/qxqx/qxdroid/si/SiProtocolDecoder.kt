@@ -2,7 +2,6 @@ package org.qxqx.qxdroid.si
 
 import android.util.Log
 import java.time.LocalDate
-import java.util.Date
 
 private const val TAG = "SiReader"
 
