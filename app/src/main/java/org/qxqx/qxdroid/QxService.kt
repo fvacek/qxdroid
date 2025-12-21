@@ -6,8 +6,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.hardware.usb.UsbDeviceConnection
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.hoho.android.usbserial.driver.UsbSerialPort
@@ -96,12 +98,24 @@ class QxService : Service() {
         )
 
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, createNotification("Service started"))
+        
+        // Start foreground with only dataSync initially to avoid SecurityException when no USB is connected.
+        // We will add connectedDevice type later when a USB device is actually connected.
+        startForegroundWithTypes(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, "Service started")
 
         // Auto-connect SHV
         serviceScope.launch {
             val params = appSettings.shvConnectionParams.first()
             connectShv(params)
+        }
+    }
+
+    private fun startForegroundWithTypes(type: Int, content: String) {
+        val notification = createNotification(content)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification, type)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
         }
     }
 
@@ -125,7 +139,13 @@ class QxService : Service() {
             port.rts = true
             serialPortManager.start(port)
             _siConnectionStatus.value = ConnectionStatus.Connected
-            updateNotification("SI Connected")
+            
+            // Now that we have a connected device, we can include the connectedDevice FGS type.
+            startForegroundWithTypes(
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+                "SI Connected"
+            )
+            
             Timber.i("SI Connected to ${port.device.deviceName}")
         } catch (e: IOException) {
             disconnectSi("Error: ${e.message}")
@@ -143,7 +163,9 @@ class QxService : Service() {
             usbSerialPort = null
             usbConnection = null
             _siConnectionStatus.value = ConnectionStatus.Disconnected(error ?: "Disconnected")
-            updateNotification("SI Disconnected")
+            
+            // Downgrade FGS type to just dataSync since USB is disconnected.
+            startForegroundWithTypes(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, "SI Disconnected")
         }
     }
 
