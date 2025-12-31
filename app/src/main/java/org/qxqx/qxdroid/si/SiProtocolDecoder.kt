@@ -111,7 +111,10 @@ class SiProtocolDecoder(
     private fun parseCard5Data(data: ByteArray) {
         val byte: (Int) -> UByte = { offset -> data[offset].toUByte() }
         val cardSerie = byte(0x06).toInt()
-        val cardNumber = getUInt16(data,0x04).toInt()
+        var cardNumber = getUInt16(data,0x04).toInt()
+        if(cardSerie > 1) {
+            cardNumber += 100000 * cardSerie
+        }
         val startTime = getUInt16(data,0x13).toInt()
         val finishTime = getUInt16(data,0x15).toInt()
         val punchCount = byte(0x17).toInt() - 1

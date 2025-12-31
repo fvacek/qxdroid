@@ -3,12 +3,11 @@ package org.qxqx.qxdroid
 import org.junit.Assert.*
 import org.junit.Test
 import org.qxqx.qxdroid.si.CardKind
-import org.qxqx.qxdroid.si.GetSiCardResp
+import org.qxqx.qxdroid.si.SiCard
 import org.qxqx.qxdroid.si.SiCardDetected
 import org.qxqx.qxdroid.si.SiCardRemoved
 import org.qxqx.qxdroid.si.SiDataFrame
-import org.qxqx.qxdroid.si.parseCard5Data
-import org.qxqx.qxdroid.si.parseCard9Data
+import org.qxqx.qxdroid.si.SiProtocolDecoder
 import org.qxqx.qxdroid.si.toSiRecCommand
 
 class SiCommandTest {
@@ -54,7 +53,8 @@ class SiCommandTest {
 
     @Test
     fun `empty card 5 read out`() {
-        val data = """
+        val frame_data1 = "02E50600010004907BB52103"
+        val frame_data2 = """
         02
         B182
         0004
@@ -69,17 +69,52 @@ class SiCommandTest {
         E243
         03
         """.trimIndent()
-        val frame = SiDataFrame.fromData(bytesFromHex(data))
-        val resp = toSiRecCommand(frame)
-        assert(resp is GetSiCardResp)
-        val card = parseCard5Data((resp as GetSiCardResp).data)
-        assertEquals(card.cardNumber.toInt(), 4329)
-        assertEquals(card.punches.size, 0)
+        var readCard: SiCard? = null
+        val decoder = SiProtocolDecoder(
+            sendSiFrame = {},
+            onCardRead = {card -> readCard = card }
+        )
+        decoder.onDataFrame(SiDataFrame.fromData(bytesFromHex(frame_data1)))
+        decoder.onDataFrame(SiDataFrame.fromData(bytesFromHex(frame_data2)))
+        assert(readCard != null)
+        assertEquals(readCard!!.cardNumber, 4329)
+        assertEquals(readCard.punches.size, 0)
+    }
+
+    @Test
+    fun `real card 5 read out`() {
+        val frameData1 = "02E50600010004907BB52103"
+        val frameData2 = """
+        02
+        B182
+        0001
+        AAFEFEFE907B04000000000000000000
+        65907B49954A700856EEEE28040F0007
+        002649BA2349DE364A01414A17374A3C
+        002E4A54204A6B00EEEE00EEEE00EEEE
+        0000EEEE00EEEE00EEEE00EEEE00EEEE
+        0000EEEE00EEEE00EEEE00EEEE00EEEE
+        0000EEEE00EEEE00EEEE00EEEE00EEEE
+        0000EEEE00EEEE00EEEE00EEEE00EEEE
+        795D
+        03
+        """.trimIndent()
+        var readCard: SiCard? = null
+        val decoder = SiProtocolDecoder(
+            sendSiFrame = {},
+            onCardRead = {card -> readCard = card }
+        )
+        decoder.onDataFrame(SiDataFrame.fromData(bytesFromHex(frameData1)))
+        decoder.onDataFrame(SiDataFrame.fromData(bytesFromHex(frameData2)))
+        assert(readCard != null)
+        assertEquals(436987, readCard!!.cardNumber)
+        assertEquals(7, readCard.punches.size)
     }
 
     @Test
     fun `card 9 read out`() {
-        val block_0 = """
+        val frame_data1 = "02E50600010004907BB52103"
+        val frame_data2 = """
         02EF83
         0004
         00
@@ -108,17 +143,21 @@ class SiCommandTest {
         EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
         017003
         """.trimIndent()
-        val frame = SiDataFrame.fromData(bytesFromHex(block_0))
-        val resp = toSiRecCommand(frame)
-        assert(resp is GetSiCardResp)
-        val card = parseCard9Data(null, 0, (resp as GetSiCardResp).data)
-        assertEquals(1504638, card.cardNumber.toInt())
-        assertEquals(6, card.punches.size)
-        assertEquals("10:58:52", timeToString(card.checkTime))
-        assertEquals("11:01:47", timeToString(card.startTime))
-        assertEquals("11:18:35", timeToString(card.finishTime))
-        assertEquals(100, card.punches[0].code)
-        assertEquals("11:04:20", timeToString(card.punches[0].time))
+        var readCard: SiCard? = null
+        val decoder = SiProtocolDecoder(
+            sendSiFrame = {},
+            onCardRead = {card -> readCard = card }
+        )
+        decoder.onDataFrame(SiDataFrame.fromData(bytesFromHex(frame_data1)))
+        decoder.onDataFrame(SiDataFrame.fromData(bytesFromHex(frame_data2)))
+        assert(readCard != null)
+        assertEquals(1504638, readCard!!.cardNumber)
+        assertEquals(6, readCard.punches.size)
+        assertEquals("10:58:52", timeToString(readCard.checkTime))
+        assertEquals("11:01:47", timeToString(readCard.startTime))
+        assertEquals("11:18:35", timeToString(readCard.finishTime))
+        assertEquals(100, readCard.punches[0].code)
+        assertEquals("11:04:20", timeToString(readCard.punches[0].time))
     }
 }
 

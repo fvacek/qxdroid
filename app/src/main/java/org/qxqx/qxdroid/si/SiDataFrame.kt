@@ -44,10 +44,8 @@ data class SiDataFrame(
         private const val STX: Byte = 0x02
         private const val ETX: Byte = 0x03
 
-        private const val TAG = "SiDataFrame"
-
         fun fromData(frame: ByteArray) : SiDataFrame {
-            //Log.d(TAG, "frame: ${bytesToHex(frame)}")
+            //val msg = "frame len: ${frame.size} data: ${bytesToHex(frame)}"
             val command = getUByte(frame, 1).toInt()
             val length = getUByte(frame, 2).toInt()
             val data = frame.copyOfRange(3, 3 + length)
