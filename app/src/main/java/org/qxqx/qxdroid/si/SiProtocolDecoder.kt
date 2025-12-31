@@ -11,6 +11,10 @@ class SiProtocolDecoder(
     private var detectedCardKind: CardKind = CardKind.CARD_8
     private var punchesReadCount: Int = 0
 
+    fun onCardReadPrivate(card: SiCard) {
+        sendSiFrame(StationBeepRq().toSiFrame())
+        onCardRead(card)
+    }
     fun onDataFrame(frame: SiDataFrame) {
         try {
             Timber.d("onDataFrame: $frame")
@@ -64,7 +68,7 @@ class SiProtocolDecoder(
                         CardKind.CARD_5 -> {
                             Timber.d("Card5 read: $sicmd")
                             parseCard5Data(sicmd.data)
-                            onCardRead(currentCard!!)
+                            onCardReadPrivate(currentCard!!)
                         }
                         CardKind.CARD_8 -> {
                             parseCard8Data(sicmd.blockNumber, sicmd.data)
@@ -73,7 +77,7 @@ class SiProtocolDecoder(
                             } else {
                                 assert(currentCard != null)
                                 assert(sicmd.blockNumber == 1)
-                                onCardRead(currentCard!!)
+                                onCardReadPrivate(currentCard!!)
                             }
                         }
                         CardKind.CARD_9 -> {
@@ -83,7 +87,7 @@ class SiProtocolDecoder(
                             } else {
                                 assert(currentCard != null)
                                 assert(sicmd.blockNumber == 1)
-                                onCardRead(currentCard!!)
+                                onCardReadPrivate(currentCard!!)
                             }
                         }
                         CardKind.SIAC -> {
@@ -92,7 +96,7 @@ class SiProtocolDecoder(
                             if (sicmd.blockNumber == 0) {
                                 sendSiFrame(SiacMeasureBatteyVoltage().toSiFrame())
                             } else if (currentCard!!.punches.size == punchesReadCount) {
-                                onCardRead(currentCard!!)
+                                onCardReadPrivate(currentCard!!)
                             } else {
                                 sendSiFrame(GetSiCard89pRq((sicmd.blockNumber + 1).toByte()).toSiFrame())
                             }

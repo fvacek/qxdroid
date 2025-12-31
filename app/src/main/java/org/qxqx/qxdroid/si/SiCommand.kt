@@ -245,3 +245,9 @@ class GetSiCard6Rq(
 class GetSiCard89pRq(
     blockNumber: Byte
 ) : GetSiCardBlock(SiCmd.GET_CARD_8, blockNumber)
+
+class StationBeepRq() : SiSendCommand(SiCmd.STATION_BEEP) {
+    override fun toSiFrame(): SiDataFrame {
+        return SiDataFrame(command.code, bytesFromHex(""))
+    }
+}

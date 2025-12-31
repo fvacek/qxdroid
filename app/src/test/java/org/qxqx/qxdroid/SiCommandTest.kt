@@ -72,7 +72,7 @@ class SiCommandTest {
         var readCard: SiCard? = null
         val decoder = SiProtocolDecoder(
             sendSiFrame = {},
-            onCardRead = {card -> readCard = card }
+            onCardReadPrivate = { card -> readCard = card }
         )
         decoder.onDataFrame(SiDataFrame.fromData(bytesFromHex(frame_data1)))
         decoder.onDataFrame(SiDataFrame.fromData(bytesFromHex(frame_data2)))
@@ -102,7 +102,7 @@ class SiCommandTest {
         var readCard: SiCard? = null
         val decoder = SiProtocolDecoder(
             sendSiFrame = {},
-            onCardRead = {card -> readCard = card }
+            onCardReadPrivate = { card -> readCard = card }
         )
         decoder.onDataFrame(SiDataFrame.fromData(bytesFromHex(frameData1)))
         decoder.onDataFrame(SiDataFrame.fromData(bytesFromHex(frameData2)))
@@ -146,7 +146,7 @@ class SiCommandTest {
         var readCard: SiCard? = null
         val decoder = SiProtocolDecoder(
             sendSiFrame = {},
-            onCardRead = {card -> readCard = card }
+            onCardReadPrivate = { card -> readCard = card }
         )
         decoder.onDataFrame(SiDataFrame.fromData(bytesFromHex(frame_data1)))
         decoder.onDataFrame(SiDataFrame.fromData(bytesFromHex(frame_data2)))
