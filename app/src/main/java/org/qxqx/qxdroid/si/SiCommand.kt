@@ -11,10 +11,11 @@ enum class SiCmd(val code: Int) {
     GET_CARD_5(0xB1),
     GET_CARD_6(0xE1),
     CARD_DETECTED_5(0xE5),
+    CARD_DETECTED_6(0xE6),
     CARD_REMOVED(0xE7),
-    CARD_DETECTED_8(0xE8),
+    CARD_DETECTED_89pt(0xE8),
     SIAC_MEASURE_BATTERY(0xEA),
-    GET_CARD_8(0xEF),
+    GET_CARD_89pt(0xEF),
     ;
 
     companion object {
@@ -25,6 +26,7 @@ enum class SiCmd(val code: Int) {
 
 enum class CardKind(val code: UInt) {
     CARD_5(0u),
+    CARD_6(0x55u),
     CARD_8(2u),
     CARD_9(1u),
     PCARD(4u),
@@ -40,22 +42,23 @@ enum class CardKind(val code: UInt) {
 sealed class SiRecCommand()
 
 data class SiCardDetected(
-    val cardKind: CardKind,
+    val command: SiCmd,
     val stationNumber: UInt,
+    val cardSerie: Int,
     val cardNumber: ULong,
 ) : SiRecCommand() {
     override fun toString(): String {
-        return "Detected: $cardKind, $cardNumber sn: $stationNumber"
+        return "Detected: $command, $cardSerie $cardNumber sn: $stationNumber"
     }
 }
 
 data class SiCardRemoved(
-    val cardSerie: CardKind,
     val stationNumber: UInt,
+    val cardSerie: Int,
     val cardNumber: ULong,
 ) : SiRecCommand() {
     override fun toString(): String {
-        return "Removed: $cardSerie, $cardNumber sn: $stationNumber"
+        return "Removed: $cardSerie $cardNumber sn: $stationNumber"
     }
 }
 
@@ -91,7 +94,6 @@ data class SiacBatteryStatus(
 }
 data class SiCard(
     val cardKind: CardKind,
-    val cardSerie: Int,
     val cardNumber: Int,
     val checkTime: Int,
     val startTime: Int,
@@ -104,7 +106,6 @@ data class SiCard(
         return RpcValue.Map(
             mapOf(
                 "cardKind" to RpcValue.String(cardKind.toString()),
-                "cardSerie" to RpcValue.Int(cardSerie),
                 "cardNumber" to RpcValue.Int(cardNumber),
                 "checkTime" to RpcValue.Int(checkTime),
                 "startTime" to RpcValue.Int(startTime),
@@ -129,7 +130,7 @@ data class SiCard(
             }
         }
         return """---------------------------
-SI CARD $cardNumber serie: $cardSerie
+SI CARD $cardNumber
 checkTime: ${timeToString(checkTime)}
 startTime: ${timeToString(startTime)}
 finishTime: ${timeToString(finishTime)}
@@ -140,6 +141,7 @@ $punchesStr
 }
 
 data class GetSiCardResp(
+    val command: SiCmd,
     val stationNumber: Int,
     val blockNumber: Int,
     val data: ByteArray
@@ -147,7 +149,7 @@ data class GetSiCardResp(
 
 class SiacMeasureBatteryVoltageResp() : SiRecCommand()
 
-private fun parseDataLayoutCardDetectedRemoved(data: ByteArray): Triple<CardKind, UInt, ULong> {
+private fun parseDataLayoutCardDetectedRemoved(data: ByteArray): Triple<Int, UInt, ULong> {
     // Assumed layout: [stationNumber: 2 bytes BE, cardNumber: 4 bytes BE]
     if (data.size != 6) {
         throw IllegalArgumentException("Data length must be 6 bytes")
@@ -155,7 +157,7 @@ private fun parseDataLayoutCardDetectedRemoved(data: ByteArray): Triple<CardKind
 
     val stationNumber = (data[0].toUInt() and 0xFFu shl 8) or (data[1].toUInt() and 0xFFu)
 
-    val cardSerie = CardKind.fromCode(data[2].toUInt() and 0xFFu)
+    val cardSerie = (data[2].toUInt() and 0xFFu).toInt()
     val cardNumber = ((data[5].toUInt() and 0xFFu)) or
             ((data[4].toUInt() and 0xFFu) shl 8) or
             ((data[3].toUInt() and 0xFFu) shl 16)
@@ -164,14 +166,14 @@ private fun parseDataLayoutCardDetectedRemoved(data: ByteArray): Triple<CardKind
 }
 
 fun toSiRecCommand(frame: SiDataFrame): SiRecCommand {
-    return when (SiCmd.fromCode(frame.command)) {
+    return when (val command = SiCmd.fromCode(frame.command)) {
         SiCmd.CARD_REMOVED -> {
             val (cardSerie, stationNumber, cardNumber) = parseDataLayoutCardDetectedRemoved(frame.data)
-            SiCardRemoved(cardSerie, stationNumber, cardNumber)
+            SiCardRemoved( stationNumber, cardSerie, cardNumber)
         }
-        SiCmd.CARD_DETECTED_5, SiCmd.CARD_DETECTED_8 -> {
+        SiCmd.CARD_DETECTED_5, SiCmd.CARD_DETECTED_6, SiCmd.CARD_DETECTED_89pt -> {
             val (cardSerie, stationNumber, cardNumber) = parseDataLayoutCardDetectedRemoved(frame.data)
-            SiCardDetected(cardSerie, stationNumber, cardNumber)
+            SiCardDetected(command, stationNumber, cardSerie, cardNumber)
         }
         SiCmd.GET_CARD_5 -> {
             // STX, 0xB1, 0x82,
@@ -184,9 +186,9 @@ fun toSiRecCommand(frame: SiDataFrame): SiRecCommand {
             val stationNumber = getUInt16(frame.data, 0).toInt()
             val data = frame.data.sliceArray(2..129)
             assert(data.size == 128)
-            GetSiCardResp(stationNumber, 0, data)
+            GetSiCardResp(command, stationNumber, 0, data)
         }
-        SiCmd.GET_CARD_8 -> {
+        SiCmd.GET_CARD_6, SiCmd.GET_CARD_89pt -> {
             // STX, 0xEF, 0x83,
             // CN1, CN0,
             // BN
@@ -199,7 +201,7 @@ fun toSiRecCommand(frame: SiDataFrame): SiRecCommand {
             val blockNumber = getUByte(frame.data, 2).toInt()
             val data = frame.data.sliceArray(3..130)
             assert(data.size == 128)
-            GetSiCardResp(stationNumber, blockNumber, data)
+            GetSiCardResp(command, stationNumber, blockNumber, data)
         }
         SiCmd.SIAC_MEASURE_BATTERY -> {
             SiacMeasureBatteryVoltageResp()
@@ -242,9 +244,9 @@ class GetSiCard6Rq(
 ) : GetSiCardBlock(SiCmd.GET_CARD_6, blockNumber)
 
 // STX, 0xEF, 0x01, BN, CRC1, CRC0, ETX
-class GetSiCard89pRq(
-    blockNumber: Byte
-) : GetSiCardBlock(SiCmd.GET_CARD_8, blockNumber)
+class GetSiCard89ptRq(
+    blockNumber: Int
+) : GetSiCardBlock(SiCmd.GET_CARD_89pt, blockNumber.toByte())
 
 class StationBeepRq() : SiSendCommand(SiCmd.STATION_BEEP) {
     override fun toSiFrame(): SiDataFrame {

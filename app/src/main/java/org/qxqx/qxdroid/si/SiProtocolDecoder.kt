@@ -2,6 +2,7 @@ package org.qxqx.qxdroid.si
 
 import timber.log.Timber
 import java.time.LocalDate
+import kotlin.math.min
 
 class SiProtocolDecoder(
     var sendSiFrame: (SiDataFrame) -> Unit,
@@ -22,34 +23,23 @@ class SiProtocolDecoder(
             when (sicmd) {
                 is SiCardDetected -> {
                     Timber.d("Card detected: $sicmd")
-                    when (sicmd.cardKind) {
-                        CardKind.CARD_5 -> {
+                    when (sicmd.command) {
+                        SiCmd.CARD_DETECTED_5 -> {
                             detectedCardKind = CardKind.CARD_5
                             sendSiFrame(GetSiCard5Rq().toSiFrame())
                         }
 
-                        CardKind.CARD_8 -> {
-                            detectedCardKind = CardKind.CARD_8
-                            val cmd = GetSiCard89pRq(0)
+                        SiCmd.CARD_DETECTED_6 -> {
+                            val cmd = GetSiCard89ptRq(0)
                             sendSiFrame(cmd.toSiFrame())
                         }
 
-                        CardKind.CARD_9 -> {
-                            detectedCardKind = CardKind.CARD_9
-                            sendSiFrame(GetSiCard89pRq(0).toSiFrame())
+                        SiCmd.CARD_DETECTED_89pt -> {
+                            sendSiFrame(GetSiCard89ptRq(0).toSiFrame())
                         }
 
-                        CardKind.TCARD -> {
-                            Timber.d("TCard detected")
-                        }
-
-                        CardKind.SIAC -> {
-                            detectedCardKind = CardKind.SIAC
-                            sendSiFrame(GetSiCard89pRq(0).toSiFrame())
-                        }
-
-                        CardKind.PCARD -> {
-                            Timber.d("pCard detected")
+                        else -> {
+                            Timber.w("Unexpected card detected command: $sicmd")
                         }
                     }
                 }
@@ -59,49 +49,56 @@ class SiProtocolDecoder(
                 }
                 is SiacMeasureBatteryVoltageResp -> {
                     Timber.d("SIAC battery voltage read: $sicmd")
-                    sendSiFrame(GetSiCard89pRq(3).toSiFrame())
+                    sendSiFrame(GetSiCard89ptRq(3).toSiFrame())
                 }
 
                 is GetSiCardResp -> {
                     Timber.d("Card $detectedCardKind read, block number: ${sicmd.blockNumber}")
-                    when (detectedCardKind) {
-                        CardKind.CARD_5 -> {
+                    if (sicmd.blockNumber > 7) {
+                        // do not read forever in case of internal bug
+                        Timber.w("Bloc number too high, internal read card error")
+                        return
+                    }
+                    when (sicmd.command) {
+                        SiCmd.GET_CARD_5 -> {
                             Timber.d("Card5 read: $sicmd")
                             parseCard5Data(sicmd.data)
                             onCardReadPrivate(currentCard!!)
                         }
-                        CardKind.CARD_8 -> {
-                            parseCard8Data(sicmd.blockNumber, sicmd.data)
-                            if (sicmd.blockNumber == 0) {
-                                sendSiFrame(GetSiCard89pRq(1).toSiFrame())
+                        SiCmd.GET_CARD_6 -> {
+                            parseCard6Data(sicmd.blockNumber, sicmd.data)
+                            val card = currentCard!!
+                            if (punchesReadCount == card.punches.size) {
+                                onCardReadPrivate(card)
+                            } else if (sicmd.blockNumber == 0) {
+                                sendSiFrame(GetSiCard6Rq(6).toSiFrame())
+                            } else if (sicmd.blockNumber == 7) {
+                                sendSiFrame(GetSiCard6Rq(2).toSiFrame())
                             } else {
-                                assert(currentCard != null)
-                                assert(sicmd.blockNumber == 1)
-                                onCardReadPrivate(currentCard!!)
+                                sendSiFrame(GetSiCard89ptRq(sicmd.blockNumber + 1).toSiFrame())
                             }
                         }
-                        CardKind.CARD_9 -> {
-                            parseCard9Data(sicmd.blockNumber, sicmd.data)
-                            if (sicmd.blockNumber == 0) {
-                                sendSiFrame(GetSiCard89pRq(1).toSiFrame())
+                        SiCmd.GET_CARD_89pt -> {
+                            parseCard89ptData(sicmd.blockNumber, sicmd.data)
+                            val card = currentCard!!
+                            if (punchesReadCount == card.punches.size) {
+                                onCardReadPrivate(card)
+                            } else if (sicmd.blockNumber == 0) {
+                                when (card.cardKind) {
+                                    CardKind.SIAC -> {
+                                        sendSiFrame(SiacMeasureBatteyVoltage().toSiFrame())
+                                    }
+                                    else -> {
+                                        sendSiFrame(GetSiCard89ptRq(1).toSiFrame())
+                                    }
+                                }
                             } else {
-                                assert(currentCard != null)
-                                assert(sicmd.blockNumber == 1)
-                                onCardReadPrivate(currentCard!!)
+                                sendSiFrame(GetSiCard89ptRq(sicmd.blockNumber + 1).toSiFrame())
                             }
                         }
-                        CardKind.SIAC -> {
-                            parseSiacData(sicmd.blockNumber, sicmd.data)
-                            assert(currentCard != null)
-                            if (sicmd.blockNumber == 0) {
-                                sendSiFrame(SiacMeasureBatteyVoltage().toSiFrame())
-                            } else if (currentCard!!.punches.size == punchesReadCount) {
-                                onCardReadPrivate(currentCard!!)
-                            } else {
-                                sendSiFrame(GetSiCard89pRq((sicmd.blockNumber + 1).toByte()).toSiFrame())
-                            }
+                        else -> {
+                            Timber.w("GetSiCardResp unexpected command: $sicmd")
                         }
-                        else -> {}
                     }
                 }
                 else -> {
@@ -133,7 +130,6 @@ class SiProtocolDecoder(
         }
         currentCard = SiCard(
             CardKind.CARD_5,
-            cardSerie,
             cardNumber,
             checkTime,
             startTime,
@@ -142,94 +138,124 @@ class SiProtocolDecoder(
         )
         punchesReadCount = punchCount
     }
-    private fun parseCard8Data(blockNumber: Int, data: ByteArray) {
+    private fun parseCard6Data(blockNumber: Int, data: ByteArray) {
         if (blockNumber == 0) {
-            currentCard = parseCard89FirstBlockData(CardKind.CARD_8, data)
+            val cardKind = CardKind.fromCode(getUByte(data, 2 * 4 + 0).toUInt())
+            assert(cardKind == CardKind.CARD_6)
+            val cardNumber = getUInt24(data, 2 * 4 + 3).toInt()
+            val punchCount = getUByte(data, 2 * 4 + 1).toInt()
+            val finishTime = getUInt16(data, 5 * 4 + 2).toInt()
+            val startTime = getUInt16(data, 6 * 4 + 2).toInt()
+            val checkTime = getUInt16(data, 7 * 4 + 2).toInt()
+
+            currentCard = SiCard(
+                cardKind, cardNumber, checkTime, startTime, finishTime, Array<SiPunch>(
+                    punchCount,
+                    init = { SiPunch(0, 0) }
+                )
+            )
             punchesReadCount = 0
         }
-        assert(blockNumber == 1)
         assert(currentCard != null)
         val card = currentCard!!
 
-        for (i in 0 until (card.punches.size)) {
-            val offset = 2 * 4 + i * 4
-            card.punches[i].code = getUByte(data, offset + 1).toInt()
-            card.punches[i].time = getUInt16(data, offset + 2).toInt()
-        }
-        punchesReadCount = card.punches.size
-    }
-
-    private fun parseCard9Data(blockNumber: Int, data: ByteArray) {
-        if (blockNumber == 0) {
-            val card = parseCard89FirstBlockData(CardKind.CARD_9, data)
-            currentCard = card
-            punchesReadCount = minOf(card.punches.size, 18)
-            for (i in 0 until punchesReadCount) {
-                val offset = 14 * 4 + i * 4
-                card.punches[i].code = getUByte(data, offset + 1).toInt()
-                card.punches[i].time = getUInt16(data, offset + 2).toInt()
-            }
-            return
-        }
-        assert(blockNumber == 1)
-        assert(currentCard != null)
-        val card = currentCard!!
+        var n = 0
         for (i in punchesReadCount until (card.punches.size)) {
-            val offset = 2 * 4 + i * 4
-            card.punches[i].code = getUByte(data, offset + 1).toInt()
-            card.punches[i].time = getUInt16(data, offset + 2).toInt()
+            val offset = n * 4
+            card.punches[punchesReadCount + i].code = getUByte(data, offset + 1).toInt()
+            card.punches[punchesReadCount + i].time = getUInt16(data, offset + 2).toInt()
+            n += 1
         }
+        punchesReadCount += n
     }
 
-    private fun parseSiacData(blockNumber: Int, data: ByteArray) {
+    private fun parseCard89ptData(blockNumber: Int, data: ByteArray) {
         if (blockNumber == 0) {
-            currentCard = parseCard89FirstBlockData(CardKind.SIAC, data)
+            val card = parseCard89ptFirstBlockData(data)
+            currentCard = card
             punchesReadCount = 0
+            if (card.cardKind == CardKind.CARD_9) {
+                parseCardPunchingData(14, data)
+            } else if (card.cardKind == CardKind.TCARD) {
+                parseTCardPunchingData(7, data)
+            }
             return
         }
         assert(currentCard != null)
         val card = currentCard!!
-        if (blockNumber == 3) {
-            // read battery status
-            var offset = 0x0F * 4
-            val yy = getUByte(data, offset + 0).toInt() + 2000
-            val mm = getUByte(data, offset + 1).toInt()
-            val dd = getUByte(data, offset + 2).toInt()
-            val newBatteryDate = LocalDate.of(yy, mm, dd)
-            Timber.d("SIAC new batery date: $newBatteryDate")
-
-            offset = 0x11 * 4
-            val mvbat = getUByte(data, offset + 3).toInt()
-            // Real battery voltage calculation: 1.9 + (BATT_VOLTAGE * 0.09) /* 1.9V is offset and 0.09 V LSB */
-            val batteryVoltage = 1.9 + (mvbat * 0.09)
-
-            offset = 0x15 * 4
-            val rbat = getUByte(data, offset + 0).toInt()
-            // RBAT	reference voltage
-            val batteryReferenceVoltage = 1.9 + (rbat * 0.09)
-
-            val lbat = getUByte(data, offset + 1).toInt()
-            // LBAT	low battery indicator:  0xAA - ok, 0x6C – low bat
-            val batteryLow = lbat != 0xAA
-
-            Timber.d("SIAC battery voltage: $batteryVoltage, reference: $batteryReferenceVoltage, low: $batteryLow")
-
-            card.baterry = SiacBatteryStatus(batteryVoltage, batteryLow, newBatteryDate)
-
+        if (card.cardKind == CardKind.CARD_8 && blockNumber == 1) {
+            parseCardPunchingData(2, data)
             return
         }
-
-        if (blockNumber > 3) {
-            // do not read more than 32 punch records from one page
-            val maxCount = minOf(card.punches.size, punchesReadCount + 32)
-            var offset = 0
-            for (i in punchesReadCount until maxCount) {
-                card.punches[i].code = getUByte(data, offset + 1).toInt()
-                card.punches[i].time = getUInt16(data, offset + 2).toInt()
-                offset += 4
-            }
-            punchesReadCount = maxCount
+        if (card.cardKind == CardKind.SIAC && blockNumber == 3) {
+            parseSacBatteryStatus(data)
+            return
         }
+        if (card.cardKind == CardKind.PCARD && blockNumber == 1) {
+            parseCardPunchingData(12, data)
+            return
+        }
+        if (card.cardKind == CardKind.TCARD) {
+            parseTCardPunchingData(0, data)
+            return
+        }
+        parseCardPunchingData(0, data)
+    }
+
+    private fun parseCardPunchingData(recordOffset: Int, data: ByteArray) {
+        assert(currentCard != null)
+        val card = currentCard!!
+
+        val maxCount = min(128 / 4 - recordOffset, card.punches.size - punchesReadCount)
+        for (i in 0 until maxCount) {
+            val offset = (recordOffset + i) * 4
+            card.punches[punchesReadCount + i].code = getUByte(data, offset + 1).toInt()
+            card.punches[punchesReadCount + i].time = getUInt16(data, offset + 2).toInt()
+        }
+        punchesReadCount += maxCount
+    }
+
+    private fun parseTCardPunchingData(recordOffset: Int, data: ByteArray) {
+        assert(currentCard != null)
+        val card = currentCard!!
+
+        val maxCount = min(128 / 8 - recordOffset, card.punches.size - punchesReadCount)
+        for (i in 0 until maxCount) {
+            val offset = (recordOffset + i) * 8
+            card.punches[i].code = getUByte(data, offset + 0).toInt()
+            card.punches[i].time = getUInt16(data, offset + 5).toInt()
+        }
+        punchesReadCount += maxCount
+    }
+
+    private fun parseSacBatteryStatus(data: ByteArray) {
+        assert(currentCard != null)
+        val card = currentCard!!
+        // read battery status
+        var offset = 0x0F * 4
+        val yy = getUByte(data, offset + 0).toInt() + 2000
+        val mm = getUByte(data, offset + 1).toInt()
+        val dd = getUByte(data, offset + 2).toInt()
+        val newBatteryDate = LocalDate.of(yy, mm, dd)
+        Timber.d("SIAC new batery date: $newBatteryDate")
+
+        offset = 0x11 * 4
+        val mvbat = getUByte(data, offset + 3).toInt()
+        // Real battery voltage calculation: 1.9 + (BATT_VOLTAGE * 0.09) /* 1.9V is offset and 0.09 V LSB */
+        val batteryVoltage = 1.9 + (mvbat * 0.09)
+
+        offset = 0x15 * 4
+        val rbat = getUByte(data, offset + 0).toInt()
+        // RBAT	reference voltage
+        val batteryReferenceVoltage = 1.9 + (rbat * 0.09)
+
+        val lbat = getUByte(data, offset + 1).toInt()
+        // LBAT	low battery indicator:  0xAA - ok, 0x6C – low bat
+        val batteryLow = lbat != 0xAA
+
+        Timber.d("SIAC battery voltage: $batteryVoltage, reference: $batteryReferenceVoltage, low: $batteryLow")
+
+        card.baterry = SiacBatteryStatus(batteryVoltage, batteryLow, newBatteryDate)
     }
 }
 
@@ -249,16 +275,16 @@ fun getUInt24(data: ByteArray, offset: Int): UInt {
     val ret = hi * 256u * 256u + mi * 256u + lo
     return ret
 }
-private fun parseCard89FirstBlockData(cardKind: CardKind, data: ByteArray): SiCard {
+private fun parseCard89ptFirstBlockData(data: ByteArray): SiCard {
     val checkTime = getUInt16(data, 2 * 4 + 2).toInt()
     val startTime = getUInt16(data, 3 * 4 + 2).toInt()
     val finishTime = getUInt16(data, 4 * 4 + 2).toInt()
     val cardNumber = getUInt24(data, 6 * 4 + 1).toInt()
-    val cardSerie = (getUByte(data, 6 * 4 + 0) and 0x0Fu).toInt()
+    val cardKind = CardKind.fromCode(getUByte(data, 6 * 4 + 0).toUInt())
     val punchCount = getUByte(data, 5 * 4 + 2).toInt()
 
     return SiCard(
-        cardKind, cardSerie, cardNumber, checkTime, startTime, finishTime, Array<SiPunch>(
+        cardKind, cardNumber, checkTime, startTime, finishTime, Array<SiPunch>(
             punchCount,
             init = { SiPunch(0, 0) }
         )
