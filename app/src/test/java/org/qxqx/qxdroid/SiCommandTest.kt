@@ -20,14 +20,14 @@ class SiCommandTest {
                 command = SiCmd.CARD_DETECTED_5,
                 stationNumber = 4u,
                 cardSerie = 0,
-                cardNumber = 4329uL
+                cardNumber = 4329L
             ),
 
             "02 e8 06 0004 01 16f57f afe2 03" to SiCardDetected(
                 command = SiCmd.CARD_DETECTED_89pt,
                 stationNumber = 4u,
                 cardSerie = 1,
-                cardNumber = 1504639uL
+                cardNumber = 1504639L
             )
         )
 
@@ -47,7 +47,7 @@ class SiCommandTest {
         val expected = SiCardRemoved(
             stationNumber = 4u,
             cardSerie = 0,
-            cardNumber = 1504639uL
+            cardNumber = 1504639L
         )
         val result = toSiRecCommand(frame)
         assertEquals(expected, result)

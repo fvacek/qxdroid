@@ -112,7 +112,7 @@ class SiProtocolDecoder(
     private fun parseCard5Data(data: ByteArray) {
         val byte: (Int) -> UByte = { offset -> data[offset].toUByte() }
         val cardSerie = byte(0x06).toInt()
-        var cardNumber = getUInt16(data,0x04).toInt()
+        var cardNumber = getUInt16(data,0x04).toLong()
         if(cardSerie > 1) {
             cardNumber += 100000 * cardSerie
         }
@@ -142,14 +142,14 @@ class SiProtocolDecoder(
         if (blockNumber == 0) {
             val cardKind = CardKind.fromCode(getUByte(data, 2 * 4 + 0).toUInt())
             assert(cardKind == CardKind.CARD_6)
-            val cardNumber = getUInt24(data, 2 * 4 + 3).toInt()
+            val cardNumber = getUInt24(data, 2 * 4 + 3).toLong()
             val punchCount = getUByte(data, 2 * 4 + 1).toInt()
             val finishTime = getUInt16(data, 5 * 4 + 2).toInt()
             val startTime = getUInt16(data, 6 * 4 + 2).toInt()
             val checkTime = getUInt16(data, 7 * 4 + 2).toInt()
 
             currentCard = SiCard(
-                cardKind, cardNumber, checkTime, startTime, finishTime, Array<SiPunch>(
+                cardKind!!, cardNumber, checkTime, startTime, finishTime, Array<SiPunch>(
                     punchCount,
                     init = { SiPunch(0, 0) }
                 )
@@ -279,9 +279,16 @@ private fun parseCard89ptFirstBlockData(data: ByteArray): SiCard {
     val checkTime = getUInt16(data, 2 * 4 + 2).toInt()
     val startTime = getUInt16(data, 3 * 4 + 2).toInt()
     val finishTime = getUInt16(data, 4 * 4 + 2).toInt()
-    val cardNumber = getUInt24(data, 6 * 4 + 1).toInt()
-    val cardKind = CardKind.fromCode(getUByte(data, 6 * 4 + 0).toUInt())
+    val cardNumber = getUInt24(data, 6 * 4 + 1).toLong()
     val punchCount = getUByte(data, 5 * 4 + 2).toInt()
+    val cardCode = getUByte(data, 6 * 4 + 0).toUInt()
+    val cardKindFromCode = CardKind.fromCode(cardCode)
+    val cardKind = if (cardKindFromCode == null || cardCode == CardKind.SIAC.code) {
+        // card 10, 11 and Siac have same code 15
+        CardKind.fromCardNumber(cardNumber)
+    } else {
+        cardKindFromCode
+    }
 
     return SiCard(
         cardKind, cardNumber, checkTime, startTime, finishTime, Array<SiPunch>(

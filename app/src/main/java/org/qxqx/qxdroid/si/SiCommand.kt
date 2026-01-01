@@ -29,13 +29,44 @@ enum class CardKind(val code: UInt) {
     CARD_6(0x55u),
     CARD_8(2u),
     CARD_9(1u),
+    CARD_10(15u),
+    CARD_11(15u),
     PCARD(4u),
     TCARD(6u),
     SIAC(15u);
 
     companion object {
-        fun fromCode(code: UInt): CardKind =
-            entries.firstOrNull { it.code == code } ?: CARD_5
+        fun fromCode(code: UInt): CardKind? =
+            entries.firstOrNull { it.code == code }
+
+        fun fromCardNumber(number: Long): CardKind {
+            // see https://docs.sportident.com/products/cards/cards-overview
+            if (number < 500000L) {
+                return CARD_5
+            }
+            if (number < 1000000L || (number in 2003000L..<2004000L)) {
+                return CARD_6
+            }
+            if ((number in 2000000L..<2003000L) || (number in 2004000L..<3000000L)) {
+                return CARD_8
+            }
+            if (number in 1000000L .. 2000000L) {
+                return CARD_9
+            }
+            if (number in 4000000L..<5000000L) {
+                return PCARD
+            }
+            if (number in 7000000L..<8000000L) {
+                return CARD_10
+            }
+            if (number in 8000000L..<9000000L) {
+                return SIAC
+            }
+            if (number in 9000000L..<10000000L) {
+                return CARD_11
+            }
+            return CARD_5
+        }
     }
 }
 
@@ -45,7 +76,7 @@ data class SiCardDetected(
     val command: SiCmd,
     val stationNumber: UInt,
     val cardSerie: Int,
-    val cardNumber: ULong,
+    val cardNumber: Long,
 ) : SiRecCommand() {
     override fun toString(): String {
         return "Detected: $command, $cardSerie $cardNumber sn: $stationNumber"
@@ -55,7 +86,7 @@ data class SiCardDetected(
 data class SiCardRemoved(
     val stationNumber: UInt,
     val cardSerie: Int,
-    val cardNumber: ULong,
+    val cardNumber: Long,
 ) : SiRecCommand() {
     override fun toString(): String {
         return "Removed: $cardSerie $cardNumber sn: $stationNumber"
@@ -76,7 +107,6 @@ data class SiPunch(
     }
 }
 
-
 data class SiacBatteryStatus(
     val voltage: Double,
     val isLow: Boolean,
@@ -94,7 +124,7 @@ data class SiacBatteryStatus(
 }
 data class SiCard(
     val cardKind: CardKind,
-    val cardNumber: Int,
+    val cardNumber: Long,
     val checkTime: Int,
     val startTime: Int,
     val finishTime: Int,
@@ -149,7 +179,7 @@ data class GetSiCardResp(
 
 class SiacMeasureBatteryVoltageResp() : SiRecCommand()
 
-private fun parseDataLayoutCardDetectedRemoved(data: ByteArray): Triple<Int, UInt, ULong> {
+private fun parseDataLayoutCardDetectedRemoved(data: ByteArray): Triple<Int, UInt, Long> {
     // Assumed layout: [stationNumber: 2 bytes BE, cardNumber: 4 bytes BE]
     if (data.size != 6) {
         throw IllegalArgumentException("Data length must be 6 bytes")
@@ -162,7 +192,7 @@ private fun parseDataLayoutCardDetectedRemoved(data: ByteArray): Triple<Int, UIn
             ((data[4].toUInt() and 0xFFu) shl 8) or
             ((data[3].toUInt() and 0xFFu) shl 16)
 
-    return Triple(cardSerie, stationNumber, cardNumber.toULong())
+    return Triple(cardSerie, stationNumber, cardNumber.toLong())
 }
 
 fun toSiRecCommand(frame: SiDataFrame): SiRecCommand {

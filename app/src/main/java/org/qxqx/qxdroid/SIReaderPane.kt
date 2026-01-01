@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.qxqx.qxdroid.si.CardKind
 import org.qxqx.qxdroid.si.SiReadOut
 import org.qxqx.qxdroid.si.SiViewModel
 
@@ -204,7 +205,7 @@ fun ReadActivityLog(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "(${card.cardKind})"
+                                    text = "${card.cardKind}"
                                 )
                             }
                             Text(
@@ -231,16 +232,34 @@ fun ReadActivityLog(
                         }
                     }
                     is SiReadOut.CardDetected -> {
-                        Text(
-                            text = activity.command.toString(),
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Text(
+                                text = "Detected ${activity.command.cardNumber}",
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${CardKind.fromCardNumber(activity.command.cardNumber)}"
+                            )
+                        }
                     }
                     is SiReadOut.CardRemoved -> {
-                        Text(
-                            text = activity.command.toString(),
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Text(
+                                text = "Removed ${activity.command.cardNumber}",
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${CardKind.fromCardNumber(activity.command.cardNumber)}"
+                            )
+                        }
                     }
                     is SiReadOut.Punch -> {
                         Text(
@@ -255,10 +274,10 @@ fun ReadActivityLog(
     }
 }
 
-fun timeToString(time: UShort): String {
-    val seconds = time.toInt()
-    val hours = seconds / 3600
-    val minutes = (seconds % 3600) / 60
-    val secs = seconds % 60
-    return String.format("%02d:%02d:%02d", hours, minutes, secs)
-}
+//fun timeToString(time: UShort): String {
+//    val seconds = time.toInt()
+//    val hours = seconds / 3600
+//    val minutes = (seconds % 3600) / 60
+//    val secs = seconds % 60
+//    return String.format("%02d:%02d:%02d", hours, minutes, secs)
+//}
