@@ -65,7 +65,7 @@ data class SiDataFrame(
                     data = data,
                 )
             } else {
-                throw RuntimeException("CRC check failed, data: ${bytesToHex(frame)}")
+                throw RuntimeException("CRC check failed, received: ${receivedCrc.toString(16)}, calculated: ${calculatedCrc.toString(16)}")
             }
         }
     }

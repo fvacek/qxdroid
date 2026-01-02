@@ -143,7 +143,7 @@ class SiProtocolDecoder(
             val cardKind = CardKind.fromCode(getUByte(data, 2 * 4 + 0).toUInt())
             assert(cardKind == CardKind.CARD_6)
             val cardNumber = getUInt24(data, 2 * 4 + 3).toLong()
-            val punchCount = getUByte(data, 2 * 4 + 1).toInt()
+            val punchCount = getUByte(data, 4 * 4 + 2).toInt()
             val finishTime = getUInt16(data, 5 * 4 + 2).toInt()
             val startTime = getUInt16(data, 6 * 4 + 2).toInt()
             val checkTime = getUInt16(data, 7 * 4 + 2).toInt()
@@ -155,6 +155,7 @@ class SiProtocolDecoder(
                 )
             )
             punchesReadCount = 0
+            return
         }
         assert(currentCard != null)
         val card = currentCard!!
