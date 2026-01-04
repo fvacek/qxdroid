@@ -30,7 +30,7 @@ class SiProtocolDecoder(
                         }
 
                         SiCmd.CARD_DETECTED_6 -> {
-                            val cmd = GetSiCard89ptRq(0)
+                            val cmd = GetSiCard6Rq(0)
                             sendSiFrame(cmd.toSiFrame())
                         }
 
