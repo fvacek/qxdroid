@@ -11,15 +11,17 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
+
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
-import android.os.ParcelUuid
+import android.os.Handler
+import android.os.Looper
+
 import org.qxqx.qxdroid.ConnectionStatus
-
+import org.qxqx.qxdroid.bytesToHex
 import org.qxqx.qxdroid.si.SiReadOut
-
+import timber.log.Timber
 import java.util.UUID
 
 class BtleReaderManager(
@@ -35,31 +37,79 @@ class BtleReaderManager(
 
     private val appContext = context.applicationContext
     private val bluetoothAdapter = appContext.getSystemService(BluetoothManager::class.java)?.adapter
-    private val scanner = bluetoothAdapter?.bluetoothLeScanner
+    private var scanResultCount = 0
     private val decoder = BtleSiProtocolDecoder(onReadOut)
     private var gatt: BluetoothGatt? = null
     private var isScanning = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val scanTimeout = Runnable {
+        if (isScanning) {
+            Timber.w("Reader BT BLE scan timed out after 20 seconds; received $scanResultCount advertisement result(s)")
+            stopScan()
+            onConnectionStatus(
+                ConnectionStatus.Disconnected(
+                    if (scanResultCount == 0) {
+                        "No BLE advertisements received; ensure Reader BT advertising is enabled"
+                    } else {
+                        "No Reader BT found in $scanResultCount BLE advertisement result(s)"
+                    }
+                )
+            )
+        }
+    }
     private val pendingNotificationCharacteristics = ArrayDeque<BluetoothGattCharacteristic>()
+
+    val isBluetoothEnabled: Boolean
+        get() = bluetoothAdapter?.isEnabled == true
 
     @SuppressLint("MissingPermission")
     fun startScan() {
-        if (isScanning) return
-        val bluetoothScanner = scanner ?: run {
+        if (isScanning) {
+            Timber.d("BLE scan requested while a scan is already running")
+            return
+        }
+        Timber.i("Starting Reader BT BLE scan: adapter=${bluetoothAdapter != null}, enabled=${bluetoothAdapter?.isEnabled}")
+        if (!isBluetoothEnabled) {
+            Timber.w("Cannot start Reader BT BLE scan because Bluetooth is disabled")
+            onConnectionStatus(ConnectionStatus.Disconnected("Bluetooth is disabled"))
+            return
+        }
+        val bluetoothScanner = bluetoothAdapter?.bluetoothLeScanner ?: run {
+            Timber.e("Cannot start BLE scan: Bluetooth adapter or scanner is unavailable")
             onConnectionStatus(ConnectionStatus.Disconnected("Bluetooth is unavailable or disabled"))
             return
         }
+        scanResultCount = 0
         isScanning = true
         onConnectionStatus(ConnectionStatus.Connecting("scanning for Reader BT"))
-        bluetoothScanner.startScan(
-            listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(READER_SETTINGS_SERVICE_UUID)).build()),
-            ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),
-            scanCallback,
-        )
+        try {
+            Timber.d("BLE scan target service UUID=$READER_SETTINGS_SERVICE_UUID; using unfiltered scan for compatibility")
+            // Do not apply a hardware scan filter here: several Android BLE stacks expose
+            // service UUIDs only in the scan response. Filter Reader BT candidates in the callback.
+            bluetoothScanner.startScan(
+                emptyList(),
+                ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),
+                scanCallback,
+            )
+            Timber.i("Reader BT BLE scan started; will stop automatically after 20 seconds")
+            mainHandler.postDelayed(scanTimeout, SCAN_DURATION_MS)
+        } catch (e: Exception) {
+            isScanning = false
+            Timber.e(e, "Exception while starting Reader BT BLE scan")
+            onConnectionStatus(ConnectionStatus.Disconnected("Cannot start Bluetooth scan: ${e.message}"))
+        }
     }
 
     @SuppressLint("MissingPermission")
     fun stopScan() {
-        if (isScanning) scanner?.stopScan(scanCallback)
+        if (!isScanning) return
+        mainHandler.removeCallbacks(scanTimeout)
+        Timber.i("Stopping Reader BT BLE scan after $scanResultCount result(s)")
+        try {
+            bluetoothAdapter?.bluetoothLeScanner?.stopScan(scanCallback)
+        } catch (e: Exception) {
+            Timber.w(e, "Exception while stopping Reader BT BLE scan")
+        }
         isScanning = false
     }
 
@@ -84,12 +134,30 @@ class BtleReaderManager(
     }
 
     private val scanCallback = object : ScanCallback() {
+        @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            onDeviceFound(ReaderDevice(result.device.address, result.device.name))
+            scanResultCount++
+            val device = result.device
+            val record = result.scanRecord
+            Timber.d(
+                "BLE result #$scanResultCount callbackType=$callbackType address=${device.address} " +
+                    "name=${device.name} rssi=${result.rssi} " +
+                    "services=${record?.serviceUuids?.joinToString() ?: "none"} " +
+                    "data=${record?.bytes?.let(::bytesToHex) ?: "none"}"
+            )
+            val advertisesReaderService = record?.serviceUuids?.any {
+                it.uuid == READER_SETTINGS_SERVICE_UUID
+            } == true
+            val hasReaderName = device.name?.startsWith("Reader BT", ignoreCase = true) == true
+            Timber.d("BLE result #$scanResultCount Reader BT candidate=$advertisesReaderService/$hasReaderName")
+            if (advertisesReaderService || hasReaderName) {
+                onDeviceFound(ReaderDevice(device.address, device.name))
+            }
         }
 
         override fun onScanFailed(errorCode: Int) {
             isScanning = false
+            Timber.e("Reader BT BLE scan failed: errorCode=$errorCode")
             onConnectionStatus(ConnectionStatus.Disconnected("Bluetooth scan failed ($errorCode)"))
         }
     }
@@ -164,5 +232,6 @@ class BtleReaderManager(
         private val CARD_DATA_UUID: UUID = UUID.fromString("bd510013-6aec-4628-a146-f3e95bc49e62")
         private val CLIENT_CHARACTERISTIC_CONFIGURATION_UUID: UUID =
             UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+        private const val SCAN_DURATION_MS = 20_000L
     }
 }

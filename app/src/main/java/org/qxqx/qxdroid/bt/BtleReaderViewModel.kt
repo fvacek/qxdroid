@@ -19,26 +19,41 @@ class BtleReaderViewModel(application: Application) : AndroidViewModel(applicati
     var connectionStatus by mutableStateOf<ConnectionStatus>(ConnectionStatus.Disconnected("Not connected"))
         private set
 
+    var isScanning by mutableStateOf(false)
+        private set
+
+    val isBluetoothEnabled: Boolean
+        get() = manager.isBluetoothEnabled
+
     private val manager = BtleReaderManager(
         context = application.applicationContext,
         onDeviceFound = { device ->
             if (devices.none { it.address == device.address }) devices += device
         },
-        onConnectionStatus = { status -> connectionStatus = status },
+        onConnectionStatus = { status ->
+            connectionStatus = status
+            isScanning = status is ConnectionStatus.Connecting &&
+                status.progress == "scanning for Reader BT"
+        },
         onRawData = { data -> hexLog += bytesToHex(data) },
         onReadOut = { readOut -> readOutLog += readOut },
     )
 
     fun startScan() {
         devices.clear()
+        isScanning = true
         manager.startScan()
     }
 
-    fun stopScan() = manager.stopScan()
+    fun stopScan() {
+        manager.stopScan()
+        isScanning = false
+    }
 
     fun connect(device: BtleReaderManager.ReaderDevice) = manager.connect(device)
 
     fun disconnect() {
+        stopScan()
         manager.disconnect()
         connectionStatus = ConnectionStatus.Disconnected("Disconnected")
     }

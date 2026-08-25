@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+
 import kotlinx.coroutines.launch
 import org.qxqx.qxdroid.shv.RpcSignal
 import org.qxqx.qxdroid.shv.ShvClient
@@ -103,11 +103,6 @@ class QxService : Service() {
         // We will add connectedDevice type later when a USB device is actually connected.
         startForegroundWithTypes(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, "Service started")
 
-        // Auto-connect SHV
-        serviceScope.launch {
-            val params = appSettings.shvConnectionParams.first()
-            connectShv(params)
-        }
     }
 
     private fun startForegroundWithTypes(type: Int, content: String) {

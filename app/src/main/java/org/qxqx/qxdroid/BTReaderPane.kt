@@ -1,6 +1,8 @@
 package org.qxqx.qxdroid
 
 import android.Manifest
+import android.app.Activity
+import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -42,16 +44,50 @@ fun BTReaderPane(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val readListState = rememberLazyListState()
-    val bluetoothPermissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-    val hasBluetoothPermissions = bluetoothPermissions.all {
+    val scanPermissions = arrayOf(
+        Manifest.permission.BLUETOOTH_SCAN,
+        Manifest.permission.BLUETOOTH_CONNECT,
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+    )
+    val hasBluetoothPermissions = listOf(
+        Manifest.permission.BLUETOOTH_SCAN,
+        Manifest.permission.BLUETOOTH_CONNECT,
+    ).all {
         ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+    }
+    val hasLocationPermission = listOf(
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+    ).any {
+        ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+    }
+    val hasScanPermissions = hasBluetoothPermissions && hasLocationPermission
+    val enableBluetoothLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) viewModel.startScan()
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        if (permissions.values.all { it }) viewModel.startScan()
+        val permissionsGranted =
+            permissions[Manifest.permission.BLUETOOTH_SCAN] == true &&
+                permissions[Manifest.permission.BLUETOOTH_CONNECT] == true &&
+                (permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+                    permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true)
+        if (permissionsGranted) {
+            if (viewModel.isBluetoothEnabled) {
+                viewModel.startScan()
+            } else {
+                enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            }
+        }
     }
 
+    LaunchedEffect(Unit) {
+        if (!hasScanPermissions) permissionLauncher.launch(scanPermissions)
+    }
     LaunchedEffect(viewModel.readOutLog.size) {
         if (viewModel.readOutLog.isNotEmpty()) {
             coroutineScope.launch { readListState.animateScrollToItem(viewModel.readOutLog.lastIndex) }
@@ -75,10 +111,25 @@ fun BTReaderPane(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
         ) {
-            OutlinedButton(onClick = {
-                if (hasBluetoothPermissions) viewModel.startScan() else permissionLauncher.launch(bluetoothPermissions)
-            }) {
-                Text("Scan for Reader BT")
+            OutlinedButton(
+                enabled = !viewModel.isScanning,
+                onClick = {
+                    when {
+                        !hasScanPermissions -> permissionLauncher.launch(scanPermissions)
+                        !viewModel.isBluetoothEnabled -> enableBluetoothLauncher.launch(
+                            Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                        )
+                        else -> viewModel.startScan()
+                    }
+                },
+            ) {
+                Text(
+                    when {
+                        viewModel.isScanning -> "Scanning…"
+                        !viewModel.isBluetoothEnabled -> "Enable Bluetooth"
+                        else -> "Scan for Reader BT"
+                    }
+                )
             }
             OutlinedButton(onClick = viewModel::disconnect) {
                 Text("Disconnect")
@@ -97,9 +148,9 @@ fun BTReaderPane(
             }
         }
 
-        if (!hasBluetoothPermissions) {
+        if (!hasScanPermissions) {
             Text(
-                text = "Bluetooth scan and connection permission are required.",
+                text = "Nearby devices and location permission are required for Bluetooth scanning.",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 color = MaterialTheme.colorScheme.error,
             )
