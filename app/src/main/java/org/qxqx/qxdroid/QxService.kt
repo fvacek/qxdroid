@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 
 import kotlinx.coroutines.launch
 import org.qxqx.qxdroid.shv.RpcSignal
@@ -34,6 +35,8 @@ import org.qxqx.qxdroid.si.SiCardDetected
 import org.qxqx.qxdroid.si.SiCardRemoved
 import timber.log.Timber
 import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URI
 
 class QxService : Service() {
 
@@ -61,6 +64,8 @@ class QxService : Service() {
     val shvConnectionStatus = shvClient.connectionStatus
 
     private lateinit var appSettings: AppSettings
+    @Volatile
+    private var httpPostParams = HttpPostParams("", false)
 
     inner class LocalBinder : Binder() {
         fun getService(): QxService = this@QxService
@@ -72,14 +77,18 @@ class QxService : Service() {
         super.onCreate()
         
         appSettings = AppSettings(this)
+        serviceScope.launch {
+            appSettings.httpPostParams.collectLatest { params ->
+                httpPostParams = params
+            }
+        }
 
         usbSiProtocolDecoder = UsbSiProtocolDecoder(
             sendSiFrame = { frame -> usbSerialPortManager.sendDataFrame(frame) },
             onCardRead = { card ->
                 val readOut = SiReadOut.Card(card)
                 serviceScope.launch {
-                    _readOutEvents.emit(readOut)
-                    publishToShv(readOut)
+                    publishReadOut(readOut)
                 }
             }
         )
@@ -180,6 +189,54 @@ class QxService : Service() {
         updateNotification("SHV Disconnected")
     }
 
+    fun setHttpPostParams(params: HttpPostParams) {
+        httpPostParams = params
+    }
+
+    private fun postCard(readOut: SiReadOut) {
+        if (readOut !is SiReadOut.Card || !httpPostParams.enabled || httpPostParams.url.isBlank()) {
+            return
+        }
+
+        val url = httpPostParams.url.trim()
+        serviceScope.launch {
+            var connection: HttpURLConnection? = null
+            try {
+                val uri = URI(url)
+                require(uri.scheme == "http" || uri.scheme == "https") {
+                    "HTTP post URL must use http or https"
+                }
+                connection = uri.toURL().openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 10_000
+                connection.readTimeout = 10_000
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                connection.outputStream.use { output ->
+                    output.write(readOut.card.toRpcValue().toCpon().toByteArray(Charsets.UTF_8))
+                }
+                val responseCode = connection.responseCode
+                if (responseCode !in 200..299) {
+                    Timber.w("Posting card to $url failed with HTTP $responseCode")
+                } else {
+                    Timber.d("Posted card ${readOut.card.cardNumber} to $url")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to post card to $url")
+            } finally {
+                connection?.disconnect()
+            }
+        }
+    }
+
+    fun publishReadOut(readOut: SiReadOut) {
+        serviceScope.launch {
+            _readOutEvents.emit(readOut)
+            publishToShv(readOut)
+            postCard(readOut)
+        }
+    }
+
     private fun handleSiDataFrame(dataFrame: SiDataFrame) {
         val cmd = toSiRecCommand(dataFrame)
         val readOut = when (cmd) {
@@ -188,10 +245,7 @@ class QxService : Service() {
             else -> null
         }
         readOut?.let {
-            serviceScope.launch {
-                _readOutEvents.emit(it)
-                publishToShv(it)
-            }
+            publishReadOut(it)
         }
     }
 

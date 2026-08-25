@@ -28,6 +28,7 @@ sealed class RpcValue {
         return (meta?.valueToCpon()?: "") + valueToCpon()
     }
 
+
     abstract fun valueToCpon(): kotlin.String
     class Null : RpcValue() {
         override fun equals(other: Any?): Boolean {

@@ -3,6 +3,7 @@ package org.qxqx.qxdroid
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -24,6 +25,11 @@ data class SerialPortParams(
     val parity: Int
 )
 
+data class HttpPostParams(
+    val url: String,
+    val enabled: Boolean
+)
+
 class AppSettings(context: Context) {
 
     // Reference to the connection DataStore
@@ -37,6 +43,9 @@ class AppSettings(context: Context) {
         val USER = stringPreferencesKey("user")
         val PASSWORD = stringPreferencesKey("password")
         val API_TOKEN = stringPreferencesKey("apiToken")
+        val HTTP_POST_URL = stringPreferencesKey("httpPostUrl")
+        val HTTP_POST_ENABLED = booleanPreferencesKey("httpPostEnabled")
+        val POST_QX_ENABLED = booleanPreferencesKey("postQxEnabled")
     }
 
     private object SerialPortKeys {
@@ -57,6 +66,17 @@ class AppSettings(context: Context) {
         )
     }
 
+    val postQxEnabled: Flow<Boolean> = shvConnectionDataStore.data.map { prefs ->
+        prefs[ShvConnectionKeys.POST_QX_ENABLED] ?: true
+    }
+
+    val httpPostParams: Flow<HttpPostParams> = shvConnectionDataStore.data.map { prefs ->
+        HttpPostParams(
+            url = prefs[ShvConnectionKeys.HTTP_POST_URL] ?: "",
+            enabled = prefs[ShvConnectionKeys.HTTP_POST_ENABLED] ?: false
+        )
+    }
+
     // Flow for Serial Port Parameters
     val serialPortParams: Flow<SerialPortParams> = serialPortDataStore.data.map { prefs ->
         SerialPortParams(
@@ -74,6 +94,19 @@ class AppSettings(context: Context) {
             prefs[ShvConnectionKeys.USER] = params.user
             prefs[ShvConnectionKeys.PASSWORD] = params.password
             prefs[ShvConnectionKeys.API_TOKEN] = params.apiToken
+        }
+    }
+
+    suspend fun savePostQxEnabled(enabled: Boolean) {
+        shvConnectionDataStore.edit { prefs ->
+            prefs[ShvConnectionKeys.POST_QX_ENABLED] = enabled
+        }
+    }
+
+    suspend fun saveHttpPostParams(params: HttpPostParams) {
+        shvConnectionDataStore.edit { prefs ->
+            prefs[ShvConnectionKeys.HTTP_POST_URL] = params.url
+            prefs[ShvConnectionKeys.HTTP_POST_ENABLED] = params.enabled
         }
     }
 

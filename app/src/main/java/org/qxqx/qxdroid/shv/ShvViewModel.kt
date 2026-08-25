@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.qxqx.qxdroid.AppSettings
 import org.qxqx.qxdroid.ConnectionStatus
+import org.qxqx.qxdroid.HttpPostParams
 import org.qxqx.qxdroid.QxService
 import org.qxqx.qxdroid.ShvConnectionParams
 
@@ -26,11 +27,38 @@ class ShvViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = ShvConnectionParams("10.0.2.2", "3755", "test", "test", "foo-bar")
         )
 
+    val postQxEnabled: StateFlow<Boolean> = appSettings.postQxEnabled
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true
+        )
+
+    val httpPostParams: StateFlow<HttpPostParams> = appSettings.httpPostParams
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = HttpPostParams("", false)
+        )
+
     private var qxService: QxService? = null
 
     fun setService(service: QxService) {
         qxService = service
         connectionStatus = service.shvConnectionStatus
+    }
+
+    fun savePostQxEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            appSettings.savePostQxEnabled(enabled)
+        }
+    }
+
+    fun saveHttpPostParams(params: HttpPostParams) {
+        viewModelScope.launch {
+            appSettings.saveHttpPostParams(params)
+            qxService?.setHttpPostParams(params)
+        }
     }
 
     fun connect(params: ShvConnectionParams) {

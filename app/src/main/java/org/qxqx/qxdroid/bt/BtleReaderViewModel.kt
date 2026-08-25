@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import org.qxqx.qxdroid.ConnectionStatus
+import org.qxqx.qxdroid.QxService
 import org.qxqx.qxdroid.bytesToHex
 import org.qxqx.qxdroid.si.SiReadOut
 
@@ -25,6 +26,12 @@ class BtleReaderViewModel(application: Application) : AndroidViewModel(applicati
     val isBluetoothEnabled: Boolean
         get() = manager.isBluetoothEnabled
 
+    private var qxService: QxService? = null
+
+    fun setService(service: QxService) {
+        qxService = service
+    }
+
     private val manager = BtleReaderManager(
         context = application.applicationContext,
         onDeviceFound = { device ->
@@ -36,7 +43,10 @@ class BtleReaderViewModel(application: Application) : AndroidViewModel(applicati
                 status.progress == "scanning for Reader BT"
         },
         onRawData = { data -> hexLog += bytesToHex(data) },
-        onReadOut = { readOut -> readOutLog += readOut },
+        onReadOut = { readOut ->
+            readOutLog += readOut
+            qxService?.publishReadOut(readOut)
+        },
     )
 
     fun startScan() {

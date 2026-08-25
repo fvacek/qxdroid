@@ -42,6 +42,7 @@ import com.hoho.android.usbserial.driver.Cp21xxSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import org.qxqx.qxdroid.ui.theme.QxDroidTheme
+import org.qxqx.qxdroid.bt.BtleReaderViewModel
 import org.qxqx.qxdroid.shv.ShvViewModel
 import org.qxqx.qxdroid.si.SiViewModel
 
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
 
     private val shvViewModel: ShvViewModel by viewModels()
     private val siViewModel: SiViewModel by viewModels()
+    private val btViewModel: BtleReaderViewModel by viewModels()
     private lateinit var usbPermissionReceiver: BroadcastReceiver
 
     private var qxService: QxService? = null
@@ -63,6 +65,7 @@ class MainActivity : ComponentActivity() {
             isBound = true
             shvViewModel.setService(qxService!!)
             siViewModel.setService(qxService!!)
+            btViewModel.setService(qxService!!)
 
             // Try to auto-connect once the service is available
             tryAutoConnect()
@@ -104,7 +107,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             QxDroidTheme {
-                QxDroidApp(siViewModel, shvViewModel)
+                QxDroidApp(siViewModel, shvViewModel, btViewModel)
             }
         }
         handleIntent(intent)
@@ -213,7 +216,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun QxDroidApp(
     siViewModel: SiViewModel = viewModel(),
-    shvViewModel: ShvViewModel = viewModel()
+    shvViewModel: ShvViewModel = viewModel(),
+    btViewModel: BtleReaderViewModel = viewModel()
 ) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.SI_READER) }
 
@@ -244,6 +248,7 @@ fun QxDroidApp(
                 }
                 AppDestinations.BT_READER -> {
                     BTReaderPane(
+                        viewModel = btViewModel,
                         modifier = Modifier.padding(innerPadding),
                     )
                 }
