@@ -38,6 +38,7 @@ class BtleReaderManager(
     private val appContext = context.applicationContext
     private val bluetoothAdapter = appContext.getSystemService(BluetoothManager::class.java)?.adapter
     private var scanResultCount = 0
+    private var readerResultCount = 0
     private val decoder = BtleSiProtocolDecoder(onReadOut)
     private var gatt: BluetoothGatt? = null
     private var isScanning = false
@@ -48,10 +49,13 @@ class BtleReaderManager(
             stopScan()
             onConnectionStatus(
                 ConnectionStatus.Disconnected(
-                    if (scanResultCount == 0) {
-                        "No BLE advertisements received; ensure Reader BT advertising is enabled"
-                    } else {
-                        "No Reader BT found in $scanResultCount BLE advertisement result(s)"
+                    when {
+                        scanResultCount == 0 ->
+                            "No BLE advertisements received; ensure Reader BT advertising is enabled"
+                        readerResultCount == 0 ->
+                            "No Reader BT found in $scanResultCount BLE advertisement result(s)"
+                        else ->
+                            "Scan complete: found $readerResultCount Reader BT advertisement(s)"
                     }
                 )
             )
@@ -80,6 +84,7 @@ class BtleReaderManager(
             return
         }
         scanResultCount = 0
+        readerResultCount = 0
         isScanning = true
         onConnectionStatus(ConnectionStatus.Connecting("scanning for Reader BT"))
         try {
@@ -151,6 +156,7 @@ class BtleReaderManager(
             val hasReaderName = device.name?.startsWith("Reader BT", ignoreCase = true) == true
             Timber.d("BLE result #$scanResultCount Reader BT candidate=$advertisesReaderService/$hasReaderName")
             if (advertisesReaderService || hasReaderName) {
+                readerResultCount++
                 onDeviceFound(ReaderDevice(device.address, device.name))
             }
         }
@@ -171,8 +177,22 @@ class BtleReaderManager(
                 if (this@BtleReaderManager.gatt === gatt) this@BtleReaderManager.gatt = null
                 return
             }
-            onConnectionStatus(ConnectionStatus.Connecting("discovering Reader BT services"))
-            gatt.discoverServices()
+            Timber.i("Reader BT connected; requesting MTU $REQUESTED_MTU")
+            onConnectionStatus(ConnectionStatus.Connecting("negotiating Reader BT MTU"))
+            if (!gatt.requestMtu(REQUESTED_MTU)) {
+                Timber.w("Reader BT MTU request was not accepted; using the default MTU")
+                discoverReaderServices(gatt)
+            }
+        }
+
+        @SuppressLint("MissingPermission")
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                Timber.i("Reader BT MTU negotiated: $mtu")
+            } else {
+                Timber.w("Reader BT MTU negotiation failed with status=$status; using the default MTU")
+            }
+            discoverReaderServices(gatt)
         }
 
         @SuppressLint("MissingPermission")
@@ -181,9 +201,12 @@ class BtleReaderManager(
                 onConnectionStatus(ConnectionStatus.Disconnected("Service discovery failed ($status)"))
                 return
             }
+            val readoutService = gatt.getService(CARD_READOUT_SERVICE_UUID)
+            Timber.i("Reader BT services discovered; readoutService=$readoutService")
             val characteristics = listOf(CARD_STATE_UUID, CARD_DATA_UUID).mapNotNull { uuid ->
                 gatt.getService(CARD_READOUT_SERVICE_UUID)?.getCharacteristic(uuid)
             }
+            Timber.i("Reader BT notification characteristics=${characteristics.map { it.uuid }}")
             if (characteristics.size != 2) {
                 onConnectionStatus(ConnectionStatus.Disconnected("Reader BT readout service is unavailable"))
                 return
@@ -194,6 +217,7 @@ class BtleReaderManager(
 
         @SuppressLint("MissingPermission")
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            Timber.i("Reader BT notification descriptor write: descriptorUuid=${descriptor.uuid}, status=$status")
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 onConnectionStatus(ConnectionStatus.Disconnected("Notification setup failed ($status)"))
                 return
@@ -202,6 +226,17 @@ class BtleReaderManager(
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+            handleNotification(characteristic, value)
+        }
+
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            // Some Android Bluetooth stacks still dispatch notifications through this callback.
+            handleNotification(characteristic, characteristic.value)
+        }
+
+        private fun handleNotification(characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+            Timber.i("Reader BT notification received: uuid=${characteristic.uuid}, ${value.size} bytes=${bytesToHex(value)}")
             onRawData(value)
             decoder.onNotification(characteristic.uuid, value)
         }
@@ -209,18 +244,32 @@ class BtleReaderManager(
     }
 
     @SuppressLint("MissingPermission")
+    private fun discoverReaderServices(gatt: BluetoothGatt) {
+        Timber.i("Discovering Reader BT GATT services")
+        onConnectionStatus(ConnectionStatus.Connecting("discovering Reader BT services"))
+        if (!gatt.discoverServices()) {
+            Timber.e("Reader BT discoverServices() was not accepted")
+            onConnectionStatus(ConnectionStatus.Disconnected("Cannot discover Reader BT services"))
+        }
+    }
+
+    @SuppressLint("MissingPermission")
     private fun enableNextNotification(gatt: BluetoothGatt) {
         val characteristic = pendingNotificationCharacteristics.removeFirstOrNull()
         if (characteristic == null) {
+            Timber.i("Reader BT notification setup completed")
             onConnectionStatus(ConnectionStatus.Connected)
             return
         }
+        Timber.i("Enabling Reader BT notification: characteristic=${characteristic.uuid}")
         val descriptor = characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIGURATION_UUID)
         if (descriptor == null || !gatt.setCharacteristicNotification(characteristic, true)) {
             onConnectionStatus(ConnectionStatus.Disconnected("Cannot subscribe to Reader BT notifications"))
             return
         }
-        if (gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) != BluetoothStatusCodes.SUCCESS) {
+        val writeStatus = gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+        Timber.i("Reader BT notification descriptor write queued: characteristic=${characteristic.uuid}, status=$writeStatus")
+        if (writeStatus != BluetoothStatusCodes.SUCCESS) {
             onConnectionStatus(ConnectionStatus.Disconnected("Cannot enable Reader BT notifications"))
         }
     }
@@ -233,5 +282,6 @@ class BtleReaderManager(
         private val CLIENT_CHARACTERISTIC_CONFIGURATION_UUID: UUID =
             UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         private const val SCAN_DURATION_MS = 20_000L
+        private const val REQUESTED_MTU = 517
     }
 }

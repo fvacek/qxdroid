@@ -7,6 +7,7 @@ import org.qxqx.qxdroid.si.SiCardRemoved
 import org.qxqx.qxdroid.si.SiCmd
 import org.qxqx.qxdroid.si.SiPunch
 import org.qxqx.qxdroid.si.SiReadOut
+import timber.log.Timber
 import java.util.UUID
 
 /** Decodes the Reader BT GATT messages described in SPORTident's Reader BT API. */
@@ -16,6 +17,7 @@ class BtleSiProtocolDecoder(
     private val reassemblers = mutableMapOf<UUID, MessageReassembler>()
 
     fun onNotification(characteristicUuid: UUID, data: ByteArray) {
+        Timber.d("Reader BT decoding notification uuid=$characteristicUuid bytes=${data.size}")
         val message = reassemblers.getOrPut(characteristicUuid, ::MessageReassembler).feed(data) ?: return
         if (message.size < HEADER_SIZE) return
 
@@ -24,9 +26,11 @@ class BtleSiProtocolDecoder(
         if (message.size < HEADER_SIZE + payloadLength) return
         val payload = message.copyOfRange(HEADER_SIZE, HEADER_SIZE + payloadLength)
 
+        Timber.d("Reader BT message id=0x${messageId.toString(16)} payloadLength=$payloadLength")
         when (messageId) {
             CARD_STATE_CHANGE -> decodeCardState(payload)
             CARD_READOUT_MINIMAL, CARD_READOUT_COMPLETE -> decodeCardReadout(payload)
+            else -> Timber.w("Reader BT unknown message id=0x${messageId.toString(16)}")
         }
     }
 
@@ -35,6 +39,7 @@ class BtleSiProtocolDecoder(
         val cardNumber = payload.u32Le(0)
         val state = payload[4].toInt() and 0xff
         val stationNumber = payload.u16Le(5).toUInt()
+        Timber.i("Reader BT card state: card=$cardNumber state=$state station=$stationNumber")
         val readOut = if (state == CARD_INSERTED) {
             SiReadOut.CardDetected(SiCardDetected(SiCmd.CARD_DETECTED_89pt, stationNumber, 0, cardNumber))
         } else {
@@ -82,16 +87,35 @@ class BtleSiProtocolDecoder(
 
     private inner class MessageReassembler {
         private var expectedLength = 0
+        private var directExpectedLength = 0
         private val buffer = ArrayList<Byte>()
 
         fun feed(raw: ByteArray): ByteArray? {
+            // Some Reader BT firmware sends a large normal message directly in
+            // MTU-sized notifications instead of using the documented wrapper.
+            if (directExpectedLength > 0) {
+                buffer.addAll(raw.toList())
+                if (buffer.size < directExpectedLength) return null
+                val result = buffer.take(directExpectedLength).toByteArray()
+                buffer.clear()
+                directExpectedLength = 0
+                return result
+            }
+
             if (raw.size < HEADER_SIZE) return null
             val messageId = raw.u16Le(0)
             val payloadLength = raw.u16Le(2)
-            if (raw.size < HEADER_SIZE + payloadLength) return null
-            if (messageId != WRAPPER_MESSAGE) return raw.copyOf(HEADER_SIZE + payloadLength)
+            val messageLength = HEADER_SIZE + payloadLength
+            if (messageId != WRAPPER_MESSAGE) {
+                if (raw.size >= messageLength) return raw.copyOf(messageLength)
+                directExpectedLength = messageLength
+                buffer.clear()
+                buffer.addAll(raw.toList())
+                return null
+            }
+            if (raw.size < messageLength) return null
 
-            val payload = raw.copyOfRange(HEADER_SIZE, HEADER_SIZE + payloadLength)
+            val payload = raw.copyOfRange(HEADER_SIZE, messageLength)
             if (payload.isEmpty()) return null
             return when (payload[0].toInt() and 0xff) {
                 FIRST_PACKET -> {
