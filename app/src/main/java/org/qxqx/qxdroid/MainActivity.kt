@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
             isBound = true
             shvViewModel.setService(qxService!!)
             siViewModel.setService(qxService!!)
-            
+
             // Try to auto-connect once the service is available
             tryAutoConnect()
         }
@@ -265,8 +265,8 @@ enum class AppDestinations(
     val label: String,
     val icon: ImageVector,
 ) {
-    SI_READER("Reader", Icons.Default.AppShortcut),
-    BT_READER("Bluetooth Reader", Icons.Filled.Bluetooth),
+    SI_READER("USB Reader", Icons.Default.AppShortcut),
+    BT_READER("BT Reader", Icons.Filled.Bluetooth),
     SHV_CLOUD("Cloud", Icons.Filled.Cloud),
     PROFILE("Profile", Icons.Default.AccountBox),
 }

@@ -10,7 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -105,11 +105,12 @@ fun BTReaderPane(
                 .background(viewModel.connectionStatus.color())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         )
-        Row(
+        FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             OutlinedButton(
                 enabled = !viewModel.isScanning,
@@ -127,21 +128,12 @@ fun BTReaderPane(
                     when {
                         viewModel.isScanning -> "Scanning…"
                         !viewModel.isBluetoothEnabled -> "Enable Bluetooth"
-                        else -> "Scan for Reader BT"
+                        else -> "Scan"
                     }
                 )
             }
             OutlinedButton(onClick = viewModel::disconnect) {
                 Text("Disconnect")
-            }
-            OutlinedButton(onClick = {
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    putExtra(Intent.EXTRA_TEXT, viewModel.hexLog.joinToString("\n"))
-                    type = "text/plain"
-                }
-                context.startActivity(Intent.createChooser(intent, null))
-            }) {
-                Text("Share Hex")
             }
             OutlinedButton(onClick = viewModel::clearLogs) {
                 Text("Clear Log")
