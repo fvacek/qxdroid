@@ -2,6 +2,7 @@ package org.qxqx.qxdroid
 
 import org.junit.Assert.*
 import org.junit.Test
+import org.qxqx.qxdroid.si.CardKind
 import org.qxqx.qxdroid.si.SiCard
 import org.qxqx.qxdroid.si.SiCardDetected
 import org.qxqx.qxdroid.si.SiCardRemoved
@@ -168,6 +169,74 @@ class SiCommandTest {
         assertEquals("05:21:32", timeToString(readCard.punches[1].time))
         assertEquals(34, readCard.punches[readCard.punches.size - 1].code)
         assertEquals("05:22:01", timeToString(readCard.punches[readCard.punches.size - 1].time))
+    }
+
+    @Test
+    fun `card 6 reads 33 punches across blocks 6 and 7`() {
+        val sentFrames = mutableListOf<SiDataFrame>()
+        var readCard: SiCard? = null
+        val decoder = UsbSiProtocolDecoder(
+            sendSiFrame = { sentFrames.add(it) },
+            onCardRead = { card -> readCard = card }
+        )
+        val punches = (1..33).map { code -> code to (1_000 + code) }
+
+        decoder.onDataFrame(card6Response(0, card6FirstBlock(punches.size)))
+        decoder.onDataFrame(card6Response(6, card6PunchBlock(punches.take(32))))
+        decoder.onDataFrame(card6Response(7, card6PunchBlock(punches.drop(32))))
+
+        assertNotNull(readCard)
+        assertEquals(punches, readCard!!.punches.map { it.code to it.time })
+        assertEquals(
+            listOf(6, 7),
+            sentFrames.filter { it.command == SiCmd.GET_CARD_6.code }.map { it.data.single().toInt() }
+        )
+    }
+
+    @Test
+    fun `card 6 reads 64 punches without overwriting the first block`() {
+        val sentFrames = mutableListOf<SiDataFrame>()
+        var readCard: SiCard? = null
+        val decoder = UsbSiProtocolDecoder(
+            sendSiFrame = { sentFrames.add(it) },
+            onCardRead = { card -> readCard = card }
+        )
+        val punches = (1..64).map { code -> code to (2_000 + code) }
+
+        decoder.onDataFrame(card6Response(0, card6FirstBlock(punches.size)))
+        decoder.onDataFrame(card6Response(6, card6PunchBlock(punches.take(32))))
+        decoder.onDataFrame(card6Response(7, card6PunchBlock(punches.drop(32))))
+
+        assertNotNull(readCard)
+        assertEquals(punches, readCard!!.punches.map { it.code to it.time })
+        assertEquals(
+            listOf(6, 7),
+            sentFrames.filter { it.command == SiCmd.GET_CARD_6.code }.map { it.data.single().toInt() }
+        )
+    }
+
+    private fun card6Response(blockNumber: Int, blockData: ByteArray): SiDataFrame {
+        val responseData = ByteArray(131)
+        responseData[2] = blockNumber.toByte()
+        blockData.copyInto(responseData, destinationOffset = 3)
+        return SiDataFrame(SiCmd.GET_CARD_6.code, responseData)
+    }
+
+    private fun card6FirstBlock(punchCount: Int): ByteArray = ByteArray(128).also { data ->
+        data[8] = CardKind.CARD_6.code.toByte()
+        data[11] = 0x0E
+        data[12] = 0xE4.toByte()
+        data[13] = 0x80.toByte()
+        data[18] = punchCount.toByte()
+    }
+
+    private fun card6PunchBlock(punches: List<Pair<Int, Int>>): ByteArray = ByteArray(128).also { data ->
+        punches.forEachIndexed { index, (code, time) ->
+            val offset = index * 4
+            data[offset + 1] = code.toByte()
+            data[offset + 2] = (time shr 8).toByte()
+            data[offset + 3] = time.toByte()
+        }
     }
 
     @Test

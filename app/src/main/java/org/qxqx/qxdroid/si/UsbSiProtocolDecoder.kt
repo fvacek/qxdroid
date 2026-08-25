@@ -75,7 +75,7 @@ class UsbSiProtocolDecoder(
                             } else if (sicmd.blockNumber == 7) {
                                 sendSiFrame(GetSiCard6Rq(2).toSiFrame())
                             } else {
-                                sendSiFrame(GetSiCard89ptRq(sicmd.blockNumber + 1).toSiFrame())
+                                sendSiFrame(GetSiCard6Rq((sicmd.blockNumber + 1).toByte()).toSiFrame())
                             }
                         }
                         SiCmd.GET_CARD_89pt -> {
@@ -160,14 +160,13 @@ class UsbSiProtocolDecoder(
         assert(currentCard != null)
         val card = currentCard!!
 
-        var n = 0
-        for (i in punchesReadCount until (card.punches.size)) {
-            val offset = n * 4
+        val count = min(128 / 4, card.punches.size - punchesReadCount)
+        for (i in 0 until count) {
+            val offset = i * 4
             card.punches[punchesReadCount + i].code = getUByte(data, offset + 1).toInt()
             card.punches[punchesReadCount + i].time = getUInt16(data, offset + 2).toInt()
-            n += 1
         }
-        punchesReadCount += n
+        punchesReadCount += count
     }
 
     private fun parseCard89ptData(blockNumber: Int, data: ByteArray) {
