@@ -150,7 +150,7 @@ class SiCommandTest {
         """.trimIndent()
         var readCard: SiCard? = null
         val decoder = SiProtocolDecoder(
-            sendSiFrame = {},
+            sendSiFrame = { frame -> println("Sending: $frame") },
             onCardRead = { card -> readCard = card }
         )
         decoder.onDataFrame(SiDataFrame.fromData(bytesFromHex(frameData1)))
