@@ -25,9 +25,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.qxqx.qxdroid.shv.RpcSignal
 import org.qxqx.qxdroid.shv.ShvClient
-import org.qxqx.qxdroid.si.SerialPortManager
+import org.qxqx.qxdroid.si.UsbSerialPortManager
 import org.qxqx.qxdroid.si.SiDataFrame
-import org.qxqx.qxdroid.si.SiProtocolDecoder
+import org.qxqx.qxdroid.si.UsbSiProtocolDecoder
 import org.qxqx.qxdroid.si.SiReadOut
 import org.qxqx.qxdroid.si.toSiRecCommand
 import org.qxqx.qxdroid.si.SiCardDetected
@@ -47,14 +47,14 @@ class QxService : Service() {
     private val _readOutEvents = MutableSharedFlow<SiReadOut>()
     val readOutEvents = _readOutEvents.asSharedFlow()
 
-    private val _hexLog = MutableSharedFlow<String>()
-    val hexLog = _hexLog.asSharedFlow()
+    private val _usbHexLog = MutableSharedFlow<String>()
+    val usbHexLog = _usbHexLog.asSharedFlow()
 
     private var usbConnection: UsbDeviceConnection? = null
     private var usbSerialPort: UsbSerialPort? = null
-    private lateinit var serialPortManager: SerialPortManager
+    private lateinit var usbSerialPortManager: UsbSerialPortManager
 
-    private lateinit var siProtocolDecoder: SiProtocolDecoder
+    private lateinit var usbSiProtocolDecoder: UsbSiProtocolDecoder
 
     // SHV related
     private val shvClient = ShvClient()
@@ -73,8 +73,8 @@ class QxService : Service() {
         
         appSettings = AppSettings(this)
 
-        siProtocolDecoder = SiProtocolDecoder(
-            sendSiFrame = { frame -> serialPortManager.sendDataFrame(frame) },
+        usbSiProtocolDecoder = UsbSiProtocolDecoder(
+            sendSiFrame = { frame -> usbSerialPortManager.sendDataFrame(frame) },
             onCardRead = { card ->
                 val readOut = SiReadOut.Card(card)
                 serviceScope.launch {
@@ -84,12 +84,12 @@ class QxService : Service() {
             }
         )
 
-        serialPortManager = SerialPortManager(
+        usbSerialPortManager = UsbSerialPortManager(
             onRawData = { data ->
-                serviceScope.launch { _hexLog.emit(bytesToHex(data)) }
+                serviceScope.launch { _usbHexLog.emit(bytesToHex(data)) }
             },
             onDataFrame = { frame ->
-                siProtocolDecoder.onDataFrame(frame)
+                usbSiProtocolDecoder.onDataFrame(frame)
                 handleSiDataFrame(frame)
             },
             onError = { e ->
@@ -137,7 +137,7 @@ class QxService : Service() {
             port.setParameters(38400, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
             port.dtr = true
             port.rts = true
-            serialPortManager.start(port)
+            usbSerialPortManager.start(port)
             _siConnectionStatus.value = ConnectionStatus.Connected
             
             // Now that we have a connected device, we can include the connectedDevice FGS type.
@@ -154,7 +154,7 @@ class QxService : Service() {
 
     fun disconnectSi(error: String? = null) {
         try {
-            serialPortManager.stop()
+            usbSerialPortManager.stop()
             usbSerialPort?.close()
             usbConnection?.close()
         } catch (e: Exception) {

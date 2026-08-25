@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.AppShortcut
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
@@ -241,6 +242,11 @@ fun QxDroidApp(
                         modifier = Modifier.padding(innerPadding),
                     )
                 }
+                AppDestinations.BT_READER -> {
+                    BTReaderPane(
+                        modifier = Modifier.padding(innerPadding),
+                    )
+                }
                 AppDestinations.SHV_CLOUD -> {
                     ShvPane(
                         viewModel = shvViewModel,
@@ -260,6 +266,7 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     SI_READER("Reader", Icons.Default.AppShortcut),
+    BT_READER("Bluetooth Reader", Icons.Filled.Bluetooth),
     SHV_CLOUD("Cloud", Icons.Filled.Cloud),
     PROFILE("Profile", Icons.Default.AccountBox),
 }

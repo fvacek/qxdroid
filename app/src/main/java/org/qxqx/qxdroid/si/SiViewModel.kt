@@ -38,7 +38,7 @@ class SiViewModel : ViewModel() {
             }
         }
         viewModelScope.launch {
-            service.hexLog.collect {
+            service.usbHexLog.collect {
                 hexLog.add(it)
             }
         }

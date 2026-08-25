@@ -4,7 +4,7 @@ import timber.log.Timber
 import java.time.LocalDate
 import kotlin.math.min
 
-class SiProtocolDecoder(
+class UsbSiProtocolDecoder(
     var sendSiFrame: (SiDataFrame) -> Unit,
     val onCardRead: (SiCard) -> Unit,
 ) {

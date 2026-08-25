@@ -1,13 +1,11 @@
 package org.qxqx.qxdroid.si
 
-import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.util.SerialInputOutputManager
-import org.qxqx.qxdroid.si.SiDataFrame
 import org.qxqx.qxdroid.bytesToHex
 import timber.log.Timber
 
-class SerialPortManager(
+class UsbSerialPortManager(
     private val onRawData: (ByteArray) -> Unit,
     private val onDataFrame: (SiDataFrame) -> Unit,
     private val onError: (Exception) -> Unit

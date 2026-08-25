@@ -7,7 +7,7 @@ import org.qxqx.qxdroid.si.SiCardDetected
 import org.qxqx.qxdroid.si.SiCardRemoved
 import org.qxqx.qxdroid.si.SiCmd
 import org.qxqx.qxdroid.si.SiDataFrame
-import org.qxqx.qxdroid.si.SiProtocolDecoder
+import org.qxqx.qxdroid.si.UsbSiProtocolDecoder
 import org.qxqx.qxdroid.si.toSiRecCommand
 
 class SiCommandTest {
@@ -72,7 +72,7 @@ class SiCommandTest {
         03
         """.trimIndent()
         var readCard: SiCard? = null
-        val decoder = SiProtocolDecoder(
+        val decoder = UsbSiProtocolDecoder(
             sendSiFrame = {},
             onCardRead = { card -> readCard = card }
         )
@@ -102,7 +102,7 @@ class SiCommandTest {
         03
         """.trimIndent()
         var readCard: SiCard? = null
-        val decoder = SiProtocolDecoder(
+        val decoder = UsbSiProtocolDecoder(
             sendSiFrame = {},
             onCardRead = { card -> readCard = card }
         )
@@ -149,7 +149,7 @@ class SiCommandTest {
         03
         """.trimIndent()
         var readCard: SiCard? = null
-        val decoder = SiProtocolDecoder(
+        val decoder = UsbSiProtocolDecoder(
             sendSiFrame = { frame -> println("Sending: $frame") },
             onCardRead = { card -> readCard = card }
         )
@@ -227,7 +227,7 @@ class SiCommandTest {
         03
         """.trimIndent()
         var readCard: SiCard? = null
-        val decoder = SiProtocolDecoder(
+        val decoder = UsbSiProtocolDecoder(
             sendSiFrame = {},
             onCardRead = { card -> readCard = card }
         )
