@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.qxqx.qxdroid.ConnectionStatus
@@ -44,6 +46,8 @@ class ShvClient {
     private val sendLock = Any()
 
     private var clientScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var connectionId = 0L
+    private val connectLock = Mutex()
 
     // replay parameter controls how many past values new collectors receive when they start listening.
     private val _messageFlow = MutableSharedFlow<RpcMessage>()
@@ -53,8 +57,15 @@ class ShvClient {
     // Use ConcurrentHashMap for thread safety.
     private val pendingResponses = ConcurrentHashMap<Long, CompletableDeferred<RpcResponse>>()
 
-    suspend fun connect(url: String) {
-        clientScope = CoroutineScope(Dispatchers.IO + SupervisorJob()) // Re-create the scope
+    suspend fun connect(url: String) = connectLock.withLock {
+        // Stop the previous listener before replacing any connection state.
+        close()
+        val newConnectionId = synchronized(sendLock) {
+            connectionId += 1
+            connectionId
+        }
+        val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        clientScope = newScope
         withContext(Dispatchers.IO) {
             try {
                 val uri = url.toUri()
@@ -73,8 +84,10 @@ class ShvClient {
                 writer = DataOutputStream(socket?.getOutputStream())
                 reader = DataInputStream(socket?.getInputStream())
 
-                clientScope.launch {
-                    listenForMessages()
+                val connectionReader = reader
+                    ?: throw IllegalStateException("Failed to create socket reader")
+                newScope.launch {
+                    listenForMessages(connectionReader, newScope, newConnectionId)
                 }
 
                 val helloResponse = sendHello()
@@ -86,7 +99,7 @@ class ShvClient {
 
                 Timber.i("Login to shv broker was successful")
                 _connectionStatus.value = ConnectionStatus.Connected
-                pingJob = clientScope.launch {
+                pingJob = newScope.launch {
                     while (isActive) {
                         try {
                             callShvMethod(".app", "ping")
@@ -183,11 +196,15 @@ class ShvClient {
         sendData(header + data)
     }
 
-    private fun listenForMessages() {
+    private fun listenForMessages(
+        connectionReader: DataInputStream,
+        connectionScope: CoroutineScope,
+        listenerConnectionId: Long,
+    ) {
         try {
-            while (clientScope.isActive && reader != null) {
+            while (connectionScope.isActive) {
                 try {
-                    val frameData = getFrameBytes(reader!!)
+                    val frameData = getFrameBytes(connectionReader)
                     val msg = RpcMessage.fromData(frameData)
                     Timber.tag(RPC_MSG).d("R==> $msg")
                     if (msg is RpcResponse) {
@@ -203,7 +220,9 @@ class ShvClient {
                 } catch (e: ReadException) {
                     if (e.reason == ReadErrorReason.UnexpectedEndOfStream) {
                         Timber.e(e, "Socked closed")
-                        _connectionStatus.value = ConnectionStatus.Disconnected("Socked closed")
+                        if (isCurrentConnection(listenerConnectionId)) {
+                            _connectionStatus.value = ConnectionStatus.Disconnected("Socked closed")
+                        }
                         break
                     }
                     Timber.e(e, "Error processing frame, skipping.")
@@ -213,29 +232,39 @@ class ShvClient {
             }
         } finally {
             Timber.i("Message listener stopped.")
-            // When the listener stops, fail all pending requests.
-            pendingResponses.values.forEach { it.cancel() }
-            pendingResponses.clear()
+            // A listener from an earlier connection must not clean up a newer one.
+            if (isCurrentConnection(listenerConnectionId)) {
+                pendingResponses.values.forEach { it.cancel() }
+                pendingResponses.clear()
+            }
         }
     }
 
+    private fun isCurrentConnection(listenerConnectionId: Long): Boolean =
+        synchronized(sendLock) { listenerConnectionId == connectionId }
+
     fun close() {
-        Timber.i("Closing connection.")
-        if (_connectionStatus.value !is ConnectionStatus.Disconnected) {
-            _connectionStatus.value = ConnectionStatus.Disconnected("Connection closed")
-        }
-        pingJob?.cancel()
-        clientScope.cancel()
-        try {
-            writer?.close()
-            reader?.close()
-            socket?.close()
-        } catch (e: IOException) {
-            Timber.w(e, "Error closing socket resources")
-        } finally {
-            writer = null
-            reader = null
-            socket = null
+        synchronized(sendLock) {
+            Timber.i("Closing connection.")
+            if (_connectionStatus.value !is ConnectionStatus.Disconnected) {
+                _connectionStatus.value = ConnectionStatus.Disconnected("Connection closed")
+            }
+            pingJob?.cancel()
+            clientScope.cancel()
+            connectionId += 1
+            pendingResponses.values.forEach { it.cancel() }
+            pendingResponses.clear()
+            try {
+                writer?.close()
+                reader?.close()
+                socket?.close()
+            } catch (e: IOException) {
+                Timber.w(e, "Error closing socket resources")
+            } finally {
+                writer = null
+                reader = null
+                socket = null
+            }
         }
     }
 }
