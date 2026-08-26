@@ -13,7 +13,7 @@ import org.qxqx.qxdroid.bytesToHex
 import org.qxqx.qxdroid.si.SiReadOut
 
 class BtleReaderViewModel(application: Application) : AndroidViewModel(application) {
-    val devices = mutableStateListOf<BtleReaderManager.ReaderDevice>()
+
     val readOutLog = mutableStateListOf<SiReadOut>()
     val hexLog = mutableStateListOf<String>()
 
@@ -34,9 +34,7 @@ class BtleReaderViewModel(application: Application) : AndroidViewModel(applicati
 
     private val manager = BtleReaderManager(
         context = application.applicationContext,
-        onDeviceFound = { device ->
-            if (devices.none { it.address == device.address }) devices += device
-        },
+
         onConnectionStatus = { status ->
             connectionStatus = status
             isScanning = status is ConnectionStatus.Connecting &&
@@ -50,7 +48,6 @@ class BtleReaderViewModel(application: Application) : AndroidViewModel(applicati
     )
 
     fun startScan() {
-        devices.clear()
         isScanning = true
         manager.startScan()
     }
@@ -60,13 +57,7 @@ class BtleReaderViewModel(application: Application) : AndroidViewModel(applicati
         isScanning = false
     }
 
-    fun connect(device: BtleReaderManager.ReaderDevice) = manager.connect(device)
 
-    fun disconnect() {
-        stopScan()
-        manager.disconnect()
-        connectionStatus = ConnectionStatus.Disconnected("Disconnected")
-    }
 
     fun clearLogs() {
         readOutLog.clear()

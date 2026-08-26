@@ -26,7 +26,7 @@ import java.util.UUID
 
 class BtleReaderManager(
     context: Context,
-    private val onDeviceFound: (ReaderDevice) -> Unit,
+
     private val onConnectionStatus: (ConnectionStatus) -> Unit,
     private val onRawData: (ByteArray) -> Unit,
     private val onReadOut: (SiReadOut) -> Unit,
@@ -141,23 +141,28 @@ class BtleReaderManager(
     private val scanCallback = object : ScanCallback() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
+            // A scan result is emitted for every received advertisement. Ignore callbacks
+            // that were already queued when the scan was stopped for a matching reader.
+            if (!isScanning) return
+
             scanResultCount++
             val device = result.device
             val record = result.scanRecord
-            Timber.d(
-                "BLE result #$scanResultCount callbackType=$callbackType address=${device.address} " +
-                    "name=${device.name} rssi=${result.rssi} " +
-                    "services=${record?.serviceUuids?.joinToString() ?: "none"} " +
-                    "data=${record?.bytes?.let(::bytesToHex) ?: "none"}"
-            )
-            val advertisesReaderService = record?.serviceUuids?.any {
-                it.uuid == READER_SETTINGS_SERVICE_UUID
-            } == true
-            val hasReaderName = device.name?.startsWith("Reader BT", ignoreCase = true) == true
-            Timber.d("BLE result #$scanResultCount Reader BT candidate=$advertisesReaderService/$hasReaderName")
-            if (advertisesReaderService || hasReaderName) {
+            // Timber.d(
+            //     "BLE result #$scanResultCount callbackType=$callbackType address=${device.address} " +
+            //         "name=${device.name} rssi=${result.rssi} " +
+            //         "services=${record?.serviceUuids?.joinToString() ?: "none"} " +
+            //         "data=${record?.bytes?.let(::bytesToHex) ?: "none"}"
+            // )
+            val advertisedName = record?.deviceName ?: device.name
+            if (advertisedName == TARGET_READER_NAME) {
                 readerResultCount++
-                onDeviceFound(ReaderDevice(device.address, device.name))
+                val reader = ReaderDevice(device.address, advertisedName)
+                Timber.i(
+                    "Target Reader BT found; connecting immediately " +
+                        "address=${reader.address} name=${reader.name}"
+                )
+                connect(reader)
             }
         }
 
@@ -275,6 +280,7 @@ class BtleReaderManager(
     }
 
     companion object {
+        private const val TARGET_READER_NAME = "Reader BT 1000017"
         val READER_SETTINGS_SERVICE_UUID: UUID = UUID.fromString("bd510001-6aec-4628-a146-f3e95bc49e62")
         private val CARD_READOUT_SERVICE_UUID: UUID = UUID.fromString("bd510011-6aec-4628-a146-f3e95bc49e62")
         private val CARD_STATE_UUID: UUID = UUID.fromString("bd510012-6aec-4628-a146-f3e95bc49e62")

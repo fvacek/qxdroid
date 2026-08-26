@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -131,9 +131,7 @@ fun BTReaderPane(
                     }
                 )
             }
-            OutlinedButton(onClick = viewModel::disconnect) {
-                Text("Disconnect")
-            }
+
             OutlinedButton(onClick = viewModel::clearLogs) {
                 Text("Clear Log")
             }
@@ -147,29 +145,6 @@ fun BTReaderPane(
             )
         }
 
-        if (viewModel.devices.isNotEmpty()) {
-            Text(
-                text = "Discovered Readers",
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                items(viewModel.devices.size) { index ->
-                    val device = viewModel.devices[index]
-                    OutlinedButton(
-                        onClick = { viewModel.connect(device) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(device.displayName)
-                            Text(device.address, style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-            }
-        }
 
         Text(
             text = "Card Readout",
