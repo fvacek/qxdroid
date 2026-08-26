@@ -28,6 +28,7 @@ class BtleReaderManager(
     context: Context,
 
     private val onConnectionStatus: (ConnectionStatus) -> Unit,
+    private val onConnectionLog: (String) -> Unit,
     private val onRawData: (ByteArray) -> Unit,
     private val onReadOut: (SiReadOut) -> Unit,
 ) {
@@ -45,7 +46,7 @@ class BtleReaderManager(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scanTimeout = Runnable {
         if (isScanning) {
-            Timber.w("Reader BT BLE scan timed out after 20 seconds; received $scanResultCount advertisement result(s)")
+            logConnection("Reader BT BLE scan timed out after 20 seconds; received $scanResultCount advertisement result(s)")
             stopScan()
             onConnectionStatus(
                 ConnectionStatus.Disconnected(
@@ -63,6 +64,11 @@ class BtleReaderManager(
     }
     private val pendingNotificationCharacteristics = ArrayDeque<BluetoothGattCharacteristic>()
 
+    private fun logConnection(message: String) {
+        Timber.i(message)
+        onConnectionLog(message)
+    }
+
     val isBluetoothEnabled: Boolean
         get() = bluetoothAdapter?.isEnabled == true
 
@@ -72,14 +78,14 @@ class BtleReaderManager(
             Timber.d("BLE scan requested while a scan is already running")
             return
         }
-        Timber.i("Starting Reader BT BLE scan: adapter=${bluetoothAdapter != null}, enabled=${bluetoothAdapter?.isEnabled}")
+        logConnection("Starting Reader BT BLE scan: adapter=${bluetoothAdapter != null}, enabled=${bluetoothAdapter?.isEnabled}")
         if (!isBluetoothEnabled) {
-            Timber.w("Cannot start Reader BT BLE scan because Bluetooth is disabled")
+            logConnection("Cannot start Reader BT BLE scan because Bluetooth is disabled")
             onConnectionStatus(ConnectionStatus.Disconnected("Bluetooth is disabled"))
             return
         }
         val bluetoothScanner = bluetoothAdapter?.bluetoothLeScanner ?: run {
-            Timber.e("Cannot start BLE scan: Bluetooth adapter or scanner is unavailable")
+            logConnection("Cannot start BLE scan: Bluetooth adapter or scanner is unavailable")
             onConnectionStatus(ConnectionStatus.Disconnected("Bluetooth is unavailable or disabled"))
             return
         }
@@ -88,7 +94,7 @@ class BtleReaderManager(
         isScanning = true
         onConnectionStatus(ConnectionStatus.Connecting("scanning for Reader BT"))
         try {
-            Timber.d("BLE scan target service UUID=$READER_SETTINGS_SERVICE_UUID; using unfiltered scan for compatibility")
+            logConnection("BLE scan target service UUID=$READER_SETTINGS_SERVICE_UUID; using unfiltered scan for compatibility")
             // Do not apply a hardware scan filter here: several Android BLE stacks expose
             // service UUIDs only in the scan response. Filter Reader BT candidates in the callback.
             bluetoothScanner.startScan(
@@ -96,11 +102,12 @@ class BtleReaderManager(
                 ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),
                 scanCallback,
             )
-            Timber.i("Reader BT BLE scan started; will stop automatically after 20 seconds")
+            logConnection("Reader BT BLE scan started; will stop automatically after 20 seconds")
             mainHandler.postDelayed(scanTimeout, SCAN_DURATION_MS)
         } catch (e: Exception) {
             isScanning = false
             Timber.e(e, "Exception while starting Reader BT BLE scan")
+            onConnectionLog("Exception while starting Reader BT BLE scan: ${e.message}")
             onConnectionStatus(ConnectionStatus.Disconnected("Cannot start Bluetooth scan: ${e.message}"))
         }
     }
@@ -109,7 +116,7 @@ class BtleReaderManager(
     fun stopScan() {
         if (!isScanning) return
         mainHandler.removeCallbacks(scanTimeout)
-        Timber.i("Stopping Reader BT BLE scan after $scanResultCount result(s)")
+        logConnection("Stopping Reader BT BLE scan after $scanResultCount result(s)")
         try {
             bluetoothAdapter?.bluetoothLeScanner?.stopScan(scanCallback)
         } catch (e: Exception) {
@@ -121,11 +128,13 @@ class BtleReaderManager(
     @SuppressLint("MissingPermission")
     fun connect(device: ReaderDevice) {
         val bluetoothDevice = bluetoothAdapter?.getRemoteDevice(device.address) ?: run {
+            onConnectionLog("Cannot connect to ${device.displayName}: Bluetooth is unavailable or disabled")
             onConnectionStatus(ConnectionStatus.Disconnected("Bluetooth is unavailable or disabled"))
             return
         }
         stopScan()
         disconnect()
+        logConnection("Connecting to ${device.displayName} (${device.address})")
         onConnectionStatus(ConnectionStatus.Connecting(device.displayName))
         gatt = bluetoothDevice.connectGatt(appContext, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
@@ -158,7 +167,7 @@ class BtleReaderManager(
             if (advertisedName == TARGET_READER_NAME) {
                 readerResultCount++
                 val reader = ReaderDevice(device.address, advertisedName)
-                Timber.i(
+                logConnection(
                     "Target Reader BT found; connecting immediately " +
                         "address=${reader.address} name=${reader.name}"
                 )
@@ -168,7 +177,7 @@ class BtleReaderManager(
 
         override fun onScanFailed(errorCode: Int) {
             isScanning = false
-            Timber.e("Reader BT BLE scan failed: errorCode=$errorCode")
+            logConnection("Reader BT BLE scan failed: errorCode=$errorCode")
             onConnectionStatus(ConnectionStatus.Disconnected("Bluetooth scan failed ($errorCode)"))
         }
     }
@@ -177,15 +186,16 @@ class BtleReaderManager(
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS || newState != BluetoothProfile.STATE_CONNECTED) {
+                onConnectionLog("Bluetooth connection failed: status=$status, state=$newState")
                 onConnectionStatus(ConnectionStatus.Disconnected("Bluetooth connection failed ($status)"))
                 gatt.close()
                 if (this@BtleReaderManager.gatt === gatt) this@BtleReaderManager.gatt = null
                 return
             }
-            Timber.i("Reader BT connected; requesting MTU $REQUESTED_MTU")
+            logConnection("Reader BT connected; requesting MTU $REQUESTED_MTU")
             onConnectionStatus(ConnectionStatus.Connecting("negotiating Reader BT MTU"))
             if (!gatt.requestMtu(REQUESTED_MTU)) {
-                Timber.w("Reader BT MTU request was not accepted; using the default MTU")
+                logConnection("Reader BT MTU request was not accepted; using the default MTU")
                 discoverReaderServices(gatt)
             }
         }
@@ -193,9 +203,9 @@ class BtleReaderManager(
         @SuppressLint("MissingPermission")
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                Timber.i("Reader BT MTU negotiated: $mtu")
+                logConnection("Reader BT MTU negotiated: $mtu")
             } else {
-                Timber.w("Reader BT MTU negotiation failed with status=$status; using the default MTU")
+                logConnection("Reader BT MTU negotiation failed with status=$status; using the default MTU")
             }
             discoverReaderServices(gatt)
         }
@@ -203,16 +213,18 @@ class BtleReaderManager(
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
+                onConnectionLog("Service discovery failed: status=$status")
                 onConnectionStatus(ConnectionStatus.Disconnected("Service discovery failed ($status)"))
                 return
             }
             val readoutService = gatt.getService(CARD_READOUT_SERVICE_UUID)
-            Timber.i("Reader BT services discovered; readoutService=$readoutService")
+            logConnection("Reader BT services discovered; readoutService=$readoutService")
             val characteristics = listOf(CARD_STATE_UUID, CARD_DATA_UUID).mapNotNull { uuid ->
                 gatt.getService(CARD_READOUT_SERVICE_UUID)?.getCharacteristic(uuid)
             }
-            Timber.i("Reader BT notification characteristics=${characteristics.map { it.uuid }}")
+            logConnection("Reader BT notification characteristics=${characteristics.map { it.uuid }}")
             if (characteristics.size != 2) {
+                onConnectionLog("Reader BT readout service is unavailable")
                 onConnectionStatus(ConnectionStatus.Disconnected("Reader BT readout service is unavailable"))
                 return
             }
@@ -222,8 +234,9 @@ class BtleReaderManager(
 
         @SuppressLint("MissingPermission")
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
-            Timber.i("Reader BT notification descriptor write: descriptorUuid=${descriptor.uuid}, status=$status")
+            logConnection("Reader BT notification descriptor write: descriptorUuid=${descriptor.uuid}, status=$status")
             if (status != BluetoothGatt.GATT_SUCCESS) {
+                onConnectionLog("Notification setup failed: status=$status")
                 onConnectionStatus(ConnectionStatus.Disconnected("Notification setup failed ($status)"))
                 return
             }
@@ -250,10 +263,10 @@ class BtleReaderManager(
 
     @SuppressLint("MissingPermission")
     private fun discoverReaderServices(gatt: BluetoothGatt) {
-        Timber.i("Discovering Reader BT GATT services")
+        logConnection("Discovering Reader BT GATT services")
         onConnectionStatus(ConnectionStatus.Connecting("discovering Reader BT services"))
         if (!gatt.discoverServices()) {
-            Timber.e("Reader BT discoverServices() was not accepted")
+            logConnection("Reader BT discoverServices() was not accepted")
             onConnectionStatus(ConnectionStatus.Disconnected("Cannot discover Reader BT services"))
         }
     }
@@ -262,19 +275,21 @@ class BtleReaderManager(
     private fun enableNextNotification(gatt: BluetoothGatt) {
         val characteristic = pendingNotificationCharacteristics.removeFirstOrNull()
         if (characteristic == null) {
-            Timber.i("Reader BT notification setup completed")
+            logConnection("Reader BT notification setup completed")
             onConnectionStatus(ConnectionStatus.Connected)
             return
         }
-        Timber.i("Enabling Reader BT notification: characteristic=${characteristic.uuid}")
+        logConnection("Enabling Reader BT notification: characteristic=${characteristic.uuid}")
         val descriptor = characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIGURATION_UUID)
         if (descriptor == null || !gatt.setCharacteristicNotification(characteristic, true)) {
+            onConnectionLog("Cannot subscribe to Reader BT notifications")
             onConnectionStatus(ConnectionStatus.Disconnected("Cannot subscribe to Reader BT notifications"))
             return
         }
         val writeStatus = gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-        Timber.i("Reader BT notification descriptor write queued: characteristic=${characteristic.uuid}, status=$writeStatus")
+        logConnection("Reader BT notification descriptor write queued: characteristic=${characteristic.uuid}, status=$writeStatus")
         if (writeStatus != BluetoothStatusCodes.SUCCESS) {
+            onConnectionLog("Cannot enable Reader BT notifications")
             onConnectionStatus(ConnectionStatus.Disconnected("Cannot enable Reader BT notifications"))
         }
     }

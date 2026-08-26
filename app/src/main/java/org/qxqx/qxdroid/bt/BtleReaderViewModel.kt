@@ -16,6 +16,7 @@ class BtleReaderViewModel(application: Application) : AndroidViewModel(applicati
 
     val readOutLog = mutableStateListOf<SiReadOut>()
     val hexLog = mutableStateListOf<String>()
+    val connectionLog = mutableStateListOf<String>()
 
     var connectionStatus by mutableStateOf<ConnectionStatus>(ConnectionStatus.Disconnected("Not connected"))
         private set
@@ -40,6 +41,7 @@ class BtleReaderViewModel(application: Application) : AndroidViewModel(applicati
             isScanning = status is ConnectionStatus.Connecting &&
                 status.progress == "scanning for Reader BT"
         },
+        onConnectionLog = { message -> connectionLog += message },
         onRawData = { data -> hexLog += bytesToHex(data) },
         onReadOut = { readOut ->
             readOutLog += readOut
@@ -62,6 +64,7 @@ class BtleReaderViewModel(application: Application) : AndroidViewModel(applicati
     fun clearLogs() {
         readOutLog.clear()
         hexLog.clear()
+        connectionLog.clear()
     }
 
     override fun onCleared() {

@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,15 +16,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +54,8 @@ fun BTReaderPane(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val readListState = rememberLazyListState()
+    val connectionListState = rememberLazyListState()
+    var isConnectionLogExpanded by rememberSaveable { mutableStateOf(false) }
     val scanPermissions = arrayOf(
         Manifest.permission.BLUETOOTH_SCAN,
         Manifest.permission.BLUETOOTH_CONNECT,
@@ -91,6 +103,13 @@ fun BTReaderPane(
     LaunchedEffect(viewModel.readOutLog.size) {
         if (viewModel.readOutLog.isNotEmpty()) {
             coroutineScope.launch { readListState.animateScrollToItem(viewModel.readOutLog.lastIndex) }
+        }
+    }
+    LaunchedEffect(viewModel.connectionLog.size) {
+        if (viewModel.connectionLog.isNotEmpty()) {
+            coroutineScope.launch {
+                connectionListState.animateScrollToItem(viewModel.connectionLog.lastIndex)
+            }
         }
     }
 
@@ -145,6 +164,40 @@ fun BTReaderPane(
             )
         }
 
+
+        Column(
+            modifier = if (isConnectionLogExpanded) Modifier.weight(1f) else Modifier,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isConnectionLogExpanded = !isConnectionLogExpanded }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = "BTLE Connect Log",
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    imageVector = if (isConnectionLogExpanded) Icons.Default.ArrowDropUp
+                    else Icons.Default.ArrowDropDown,
+                    contentDescription = if (isConnectionLogExpanded) "Collapse" else "Expand",
+                )
+            }
+            HorizontalDivider()
+            if (isConnectionLogExpanded) {
+                LazyColumn(state = connectionListState) {
+                    items(viewModel.connectionLog) { message ->
+                        Text(
+                            text = message,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+            }
+        }
 
         Text(
             text = "Card Readout",
