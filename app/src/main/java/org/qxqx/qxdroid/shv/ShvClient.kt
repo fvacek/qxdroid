@@ -41,6 +41,7 @@ class ShvClient {
     private var writer: DataOutputStream? = null
     private var reader: DataInputStream? = null
     private var pingJob: Job? = null
+    private val sendLock = Any()
 
     private var clientScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -136,13 +137,15 @@ class ShvClient {
     }
 
     private fun sendData(data: ByteArray) {
-        writer?.let {
-            try {
-                it.write(data)
-                it.flush()
-            } catch (e: IOException) {
-                Timber.e("Failed to send data: $e")
-                close()
+        synchronized(sendLock) {
+            writer?.let {
+                try {
+                    it.write(data)
+                    it.flush()
+                } catch (e: IOException) {
+                    Timber.e("Failed to send data: $e")
+                    close()
+                }
             }
         }
     }
@@ -176,8 +179,8 @@ class ShvClient {
         val ba = ByteArrayOutputStream()
         val writer = ChainPackWriter(ba)
         writer.writeUintData((data.size + 1).toULong())
-        sendData(ba.toByteArray() + byteArrayOf(Protocol.CHAIN_PACK.toByte()))
-        sendData(data)
+        val header = ba.toByteArray() + byteArrayOf(Protocol.CHAIN_PACK.toByte())
+        sendData(header + data)
     }
 
     private fun listenForMessages() {
