@@ -3,8 +3,11 @@ package org.qxqx.qxdroid.shv
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -17,8 +20,10 @@ import org.qxqx.qxdroid.ShvConnectionParams
 class ShvViewModel(application: Application) : AndroidViewModel(application) {
     private val appSettings = AppSettings(application)
 
-    var connectionStatus = org.qxqx.qxdroid.shv.ShvClient().connectionStatus // Temporary default
-        private set
+    private val _connectionStatus = MutableStateFlow<ConnectionStatus>(
+        ConnectionStatus.Disconnected("Service unavailable")
+    )
+    val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus.asStateFlow()
 
     val connectionParams: StateFlow<ShvConnectionParams> = appSettings.shvConnectionParams
         .stateIn(
@@ -42,10 +47,17 @@ class ShvViewModel(application: Application) : AndroidViewModel(application) {
         )
 
     private var qxService: QxService? = null
+    private var connectionStatusJob: Job? = null
 
     fun setService(service: QxService) {
         qxService = service
-        connectionStatus = service.shvConnectionStatus
+        connectionStatusJob?.cancel()
+        _connectionStatus.value = service.shvConnectionStatus.value
+        connectionStatusJob = viewModelScope.launch {
+            service.shvConnectionStatus.collectLatest { status ->
+                _connectionStatus.value = status
+            }
+        }
     }
 
     fun savePostQxEnabled(enabled: Boolean) {
