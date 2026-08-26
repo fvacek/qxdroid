@@ -203,7 +203,7 @@ fun PasswordTextField(
 
             val description = if (passwordVisible) "Hide password" else "Show password"
 
-            IconButton(onClick = { !passwordVisible }) {
+            IconButton(onClick = { passwordVisible = !passwordVisible }) {
                 Icon(imageVector = icon, contentDescription = description)
             }
         }
