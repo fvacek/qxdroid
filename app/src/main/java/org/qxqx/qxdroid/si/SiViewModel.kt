@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -23,23 +24,27 @@ class SiViewModel : ViewModel() {
         private set
 
     private var qxService: QxService? = null
+    private var serviceCollectorsJob: Job? = null
 
     fun setService(service: QxService) {
+        serviceCollectorsJob?.cancel()
         qxService = service
-        viewModelScope.launch {
-            service.siConnectionStatus.collectLatest {
-                connectionStatus = it
+        serviceCollectorsJob = viewModelScope.launch {
+            launch {
+                service.siConnectionStatus.collectLatest {
+                    connectionStatus = it
+                }
             }
-        }
-        viewModelScope.launch {
-            service.readOutEvents.collect {
-                readOutLog.add(it)
-                _readOutEvents.emit(it)
+            launch {
+                service.readOutEvents.collect {
+                    readOutLog.add(it)
+                    _readOutEvents.emit(it)
+                }
             }
-        }
-        viewModelScope.launch {
-            service.usbHexLog.collect {
-                hexLog.add(it)
+            launch {
+                service.usbHexLog.collect {
+                    hexLog.add(it)
+                }
             }
         }
     }
