@@ -1,6 +1,5 @@
 package org.qxqx.qxdroid.bt
 
-
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
@@ -11,13 +10,12 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.ScanCallback
-
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
-
 import org.qxqx.qxdroid.ConnectionStatus
 import org.qxqx.qxdroid.bytesToHex
 import org.qxqx.qxdroid.si.SiReadOut
@@ -26,7 +24,6 @@ import java.util.UUID
 
 class BtleReaderManager(
     context: Context,
-
     private val onConnectionStatus: (ConnectionStatus) -> Unit,
     private val onConnectionLog: (String) -> Unit,
     private val onRawData: (ByteArray) -> Unit,
@@ -40,7 +37,7 @@ class BtleReaderManager(
     private val bluetoothAdapter = appContext.getSystemService(BluetoothManager::class.java)?.adapter
     private var scanResultCount = 0
     private var readerResultCount = 0
-    private val decoder = BtleSiProtocolDecoder(onReadOut)
+    private val decoder = BtleSiProtocolDecoder(onReadOut, ::writeBleCommand)
     private var gatt: BluetoothGatt? = null
     private var isScanning = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -95,8 +92,6 @@ class BtleReaderManager(
         onConnectionStatus(ConnectionStatus.Connecting("scanning for Reader BT"))
         try {
             logConnection("BLE scan target service UUID=$READER_SETTINGS_SERVICE_UUID; using unfiltered scan for compatibility")
-            // Do not apply a hardware scan filter here: several Android BLE stacks expose
-            // service UUIDs only in the scan response. Filter Reader BT candidates in the callback.
             bluetoothScanner.startScan(
                 emptyList(),
                 ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),
@@ -147,29 +142,45 @@ class BtleReaderManager(
         gatt = null
     }
 
+    @SuppressLint("MissingPermission")
+    fun writeBleCommand(characteristicUuid: UUID, data: ByteArray) {
+        val gatt = gatt ?: return
+        val serviceUuid = when (characteristicUuid) {
+            READER_SETTINGS_SERVICE_UUID, BtleSiProtocolDecoder.SETTINGS_WRITE_UUID -> READER_SETTINGS_SERVICE_UUID
+            else -> CARD_READOUT_SERVICE_UUID
+        }
+        val service = gatt.getService(serviceUuid) ?: return
+        val characteristic = service.getCharacteristic(characteristicUuid) ?: return
+        logConnection("Writing BLE command to characteristic=$characteristicUuid data=${bytesToHex(data)}")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            gatt.writeCharacteristic(characteristic, data, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+        } else {
+            @Suppress("DEPRECATION")
+            characteristic.value = data
+            @Suppress("DEPRECATION")
+            characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            @Suppress("DEPRECATION")
+            gatt.writeCharacteristic(characteristic)
+        }
+    }
+
     private val scanCallback = object : ScanCallback() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            // A scan result is emitted for every received advertisement. Ignore callbacks
-            // that were already queued when the scan was stopped for a matching reader.
             if (!isScanning) return
 
             scanResultCount++
             val device = result.device
             val record = result.scanRecord
-            // Timber.d(
-            //     "BLE result #$scanResultCount callbackType=$callbackType address=${device.address} " +
-            //         "name=${device.name} rssi=${result.rssi} " +
-            //         "services=${record?.serviceUuids?.joinToString() ?: "none"} " +
-            //         "data=${record?.bytes?.let(::bytesToHex) ?: "none"}"
-            // )
             val advertisedName = record?.deviceName ?: device.name
-            if (advertisedName == TARGET_READER_NAME) {
+            val isReaderBt = advertisedName?.contains("Reader BT", ignoreCase = true) == true ||
+                    record?.serviceUuids?.any { it.uuid == READER_SETTINGS_SERVICE_UUID } == true
+
+            if (isReaderBt) {
                 readerResultCount++
                 val reader = ReaderDevice(device.address, advertisedName)
                 logConnection(
-                    "Target Reader BT found; connecting immediately " +
-                        "address=${reader.address} name=${reader.name}"
+                    "Target Reader BT found; connecting immediately address=${reader.address} name=${reader.name}"
                 )
                 connect(reader)
             }
@@ -249,7 +260,6 @@ class BtleReaderManager(
 
         @Suppress("DEPRECATION")
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-            // Some Android Bluetooth stacks still dispatch notifications through this callback.
             handleNotification(characteristic, characteristic.value)
         }
 
@@ -258,7 +268,6 @@ class BtleReaderManager(
             onRawData(value)
             decoder.onNotification(characteristic.uuid, value)
         }
-
     }
 
     @SuppressLint("MissingPermission")
@@ -277,6 +286,7 @@ class BtleReaderManager(
         if (characteristic == null) {
             logConnection("Reader BT notification setup completed")
             onConnectionStatus(ConnectionStatus.Connected)
+            writeBleCommand(BtleSiProtocolDecoder.SETTINGS_WRITE_UUID, BtleSiProtocolDecoder.SET_AUTOSEND_ON_MSG)
             return
         }
         logConnection("Enabling Reader BT notification: characteristic=${characteristic.uuid}")
@@ -295,7 +305,6 @@ class BtleReaderManager(
     }
 
     companion object {
-        private const val TARGET_READER_NAME = "Reader BT 1000017"
         val READER_SETTINGS_SERVICE_UUID: UUID = UUID.fromString("bd510001-6aec-4628-a146-f3e95bc49e62")
         private val CARD_READOUT_SERVICE_UUID: UUID = UUID.fromString("bd510011-6aec-4628-a146-f3e95bc49e62")
         private val CARD_STATE_UUID: UUID = UUID.fromString("bd510012-6aec-4628-a146-f3e95bc49e62")

@@ -56,6 +56,9 @@ enum class CardKind(val code: UInt) {
             if (number in 4000000L..<5000000L) {
                 return PCARD
             }
+            if (number in 6000000L..<7000000L) {
+                return TCARD
+            }
             if (number in 7000000L..<8000000L) {
                 return CARD_10
             }

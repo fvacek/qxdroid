@@ -8,8 +8,10 @@ import org.qxqx.qxdroid.si.SiCardDetected
 import org.qxqx.qxdroid.si.SiCardRemoved
 import org.qxqx.qxdroid.si.SiCmd
 import org.qxqx.qxdroid.si.SiDataFrame
+import org.qxqx.qxdroid.si.SiReadOut
 import org.qxqx.qxdroid.si.UsbSiProtocolDecoder
 import org.qxqx.qxdroid.si.toSiRecCommand
+import java.util.UUID
 
 class SiCommandTest {
 
@@ -316,5 +318,169 @@ class SiCommandTest {
         assertEquals(31, readCard.punches[20].code)
         assertEquals("10:54:47", timeToString(readCard.punches[20].time))
     }
+
+    @Test
+    fun `BtleSiProtocolDecoder should decode CardStateChange and trigger readout request`() {
+        val readOuts = mutableListOf<SiReadOut>()
+        val sentCommands = mutableListOf<Pair<UUID, ByteArray>>()
+
+        val decoder = org.qxqx.qxdroid.bt.BtleSiProtocolDecoder(
+            onReadOut = { readOuts.add(it) },
+            sendBleCommand = { uuid, data -> sentCommands.add(uuid to data) }
+        )
+
+        // 0x1101 message: Card state change, payload len 7: card=1504639 (0x16F57F), state=1 (inserted), station=4
+        val payload = byteArrayOf(
+            0x7F.toByte(), 0xF5.toByte(), 0x16.toByte(), 0x00.toByte(), // card 1504639
+            0x01.toByte(), // inserted
+            0x04.toByte(), 0x00.toByte() // station 4
+        )
+        val header = byteArrayOf(0x01.toByte(), 0x11.toByte(), 0x07.toByte(), 0x00.toByte())
+        val frame = header + payload
+
+        decoder.onNotification(org.qxqx.qxdroid.bt.BtleSiProtocolDecoder.CARD_DATA_UUID, frame)
+
+        assertEquals(1, readOuts.size)
+        assertTrue(readOuts[0] is SiReadOut.CardDetected)
+        val detected = (readOuts[0] as SiReadOut.CardDetected).command
+        assertEquals(1504639L, detected.cardNumber)
+        assertEquals(4u, detected.stationNumber)
+
+        assertEquals(1, sentCommands.size)
+        assertEquals(org.qxqx.qxdroid.bt.BtleSiProtocolDecoder.CARD_DATA_UUID, sentCommands[0].first)
+        assertArrayEquals(org.qxqx.qxdroid.bt.BtleSiProtocolDecoder.REQUEST_CARD_READOUT_MSG, sentCommands[0].second)
+    }
+
+    @Test
+    fun `BtleSiProtocolDecoder should decode CardReadout and send feedback command`() {
+        val readOuts = mutableListOf<SiReadOut>()
+        val sentCommands = mutableListOf<Pair<UUID, ByteArray>>()
+
+        val decoder = org.qxqx.qxdroid.bt.BtleSiProtocolDecoder(
+            onReadOut = { readOuts.add(it) },
+            sendBleCommand = { uuid, data -> sentCommands.add(uuid to data) }
+        )
+
+        // Card readout 0x1103: card=8632100 (0x83B324), family=15 (SIAC), 2 punches + SIAC prod data
+        // Punch 1: Check (type=2), station=31, time = 35600000 ms (09:53:20)
+        // Punch 2: Control (type=7), station=48, time = 36240000 ms (10:04:00)
+        val cardNumBytes = byteArrayOf(0x24.toByte(), 0xB3.toByte(), 0x83.toByte(), 0x00.toByte())
+        val familyByte = byteArrayOf(15.toByte())
+        val punchCountBytes = byteArrayOf(0x02.toByte(), 0x00.toByte())
+
+        val punch1 = byteArrayOf(
+            0x00.toByte(), 0x02.toByte(), 31.toByte(), 0x00.toByte(),
+            0x20.toByte(), 0xDC.toByte(), 0x1E.toByte(), 0x02.toByte() // 35600000 ms
+        )
+        val punch2 = byteArrayOf(
+            0x00.toByte(), 0x07.toByte(), 48.toByte(), 0x00.toByte(),
+            0xF0.toByte(), 0xD6.toByte(), 0x28.toByte(), 0x02.toByte() // 36240000 ms
+        )
+
+        // 13 bytes SIAC prod data:
+        // hw=10, sw=20, signal=5, clear=12, battery_mv=3100 (0x0C1C), year=24, month=5, day=15, prod_year=20, prod_month=1
+        val siacProdData = byteArrayOf(
+            10.toByte(), 20.toByte(), 0x05.toByte(), 0x00.toByte(), 0x0C.toByte(), 0x00.toByte(),
+            0x1C.toByte(), 0x0C.toByte(), // battery 3100 mV
+            24.toByte(), 5.toByte(), 15.toByte(), // battery date: 2024-05-15
+            20.toByte(), 1.toByte()
+        )
+
+        val payload = cardNumBytes + familyByte + punchCountBytes + punch1 + punch2 + siacProdData
+        val payloadLen = payload.size
+        val header = byteArrayOf(0x03.toByte(), 0x11.toByte(), (payloadLen and 0xff).toByte(), ((payloadLen shr 8) and 0xff).toByte())
+        val frame = header + payload
+
+        decoder.onNotification(org.qxqx.qxdroid.bt.BtleSiProtocolDecoder.CARD_DATA_UUID, frame)
+
+        assertEquals(1, readOuts.size)
+        assertTrue(readOuts[0] is SiReadOut.Card)
+        val card = (readOuts[0] as SiReadOut.Card).card
+        assertEquals(8631076L, card.cardNumber)
+        assertEquals(CardKind.SIAC, card.cardKind)
+        assertEquals("09:52:56", timeToString(card.checkTime))
+        assertEquals("--:--:--", timeToString(card.startTime))
+        assertEquals("--:--:--", timeToString(card.finishTime))
+        assertEquals(1, card.punches.size)
+        assertEquals(48, card.punches[0].code)
+        assertEquals("10:03:50", timeToString(card.punches[0].time))
+
+        assertNotNull(card.baterry)
+        assertEquals(3.10, card.baterry!!.voltage, 0.01)
+        assertFalse(card.baterry!!.isLow)
+        assertEquals("2024-05-15", card.baterry!!.replaceDate.toString())
+
+        assertEquals(1, sentCommands.size)
+        assertEquals(org.qxqx.qxdroid.bt.BtleSiProtocolDecoder.CARD_DATA_UUID, sentCommands[0].first)
+        assertArrayEquals(org.qxqx.qxdroid.bt.BtleSiProtocolDecoder.FEEDBACK_OK_MSG, sentCommands[0].second)
+    }
+
+    @Test
+    fun `BtleSiProtocolDecoder should handle invalid times as NO_TIME`() {
+        val readOuts = mutableListOf<SiReadOut>()
+        val decoder = org.qxqx.qxdroid.bt.BtleSiProtocolDecoder(
+            onReadOut = { readOuts.add(it) }
+        )
+
+        // Card readout 0x1102: card=1504639, family=1, 1 punch with time_in_ms = 0xFFFFFFFF
+        val cardNumBytes = byteArrayOf(0x7F.toByte(), 0xF5.toByte(), 0x16.toByte(), 0x00.toByte())
+        val familyByte = byteArrayOf(1.toByte())
+        val punchCountBytes = byteArrayOf(0x01.toByte(), 0x00.toByte())
+        val punch1 = byteArrayOf(
+            0x00.toByte(), 0x02.toByte(), 31.toByte(), 0x00.toByte(),
+            0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte() // invalid time
+        )
+
+        val payload = cardNumBytes + familyByte + punchCountBytes + punch1
+        val header = byteArrayOf(0x02.toByte(), 0x11.toByte(), payload.size.toByte(), 0x00.toByte())
+
+        decoder.onNotification(org.qxqx.qxdroid.bt.BtleSiProtocolDecoder.CARD_DATA_UUID, header + payload)
+
+        assertEquals(1, readOuts.size)
+        val card = (readOuts[0] as SiReadOut.Card).card
+        assertEquals("--:--:--", timeToString(card.checkTime))
+    }
+
+    @Test
+    fun `BtleSiProtocolDecoder reassembler should assemble fragmented wrapper 0xA101 packets`() {
+        val readOuts = mutableListOf<SiReadOut>()
+        val decoder = org.qxqx.qxdroid.bt.BtleSiProtocolDecoder(
+            onReadOut = { readOuts.add(it) }
+        )
+
+        // Build inner card readout 0x1102 frame
+        val innerPayload = byteArrayOf(
+            0x7F.toByte(), 0xF5.toByte(), 0x16.toByte(), 0x00.toByte(), // card 1504639
+            1.toByte(), // family
+            0.toByte(), 0.toByte() // 0 punches
+        )
+        val innerMsg = byteArrayOf(0x02.toByte(), 0x11.toByte(), innerPayload.size.toByte(), 0x00.toByte()) + innerPayload
+
+        // Split innerMsg into 2 segment chunks
+        val chunk1 = innerMsg.copyOfRange(0, 5)
+        val chunk2 = innerMsg.copyOfRange(5, innerMsg.size)
+
+        // Wrapper 0xA101 First Packet (flag=1):
+        // header: 0x01 0xA1 (msgId), len (1 + 4 + chunk1.size), flag=1, total_len = innerMsg.size (4 B)
+        val wrapper1PayloadLen = 1 + 4 + chunk1.size
+        val wrapper1Header = byteArrayOf(0x01.toByte(), 0xA1.toByte(), wrapper1PayloadLen.toByte(), 0x00.toByte())
+        val totalLenBytes = byteArrayOf(innerMsg.size.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte())
+        val wrapper1 = wrapper1Header + byteArrayOf(0x01.toByte()) + totalLenBytes + chunk1
+
+        // Wrapper 0xA101 Last Packet (flag=2):
+        // header: 0x01 0xA1 (msgId), len (1 + chunk2.size), flag=2
+        val wrapper2PayloadLen = 1 + chunk2.size
+        val wrapper2Header = byteArrayOf(0x01.toByte(), 0xA1.toByte(), wrapper2PayloadLen.toByte(), 0x00.toByte())
+        val wrapper2 = wrapper2Header + byteArrayOf(0x02.toByte()) + chunk2
+
+        decoder.onNotification(org.qxqx.qxdroid.bt.BtleSiProtocolDecoder.CARD_DATA_UUID, wrapper1)
+        assertEquals(0, readOuts.size) // Not complete yet
+
+        decoder.onNotification(org.qxqx.qxdroid.bt.BtleSiProtocolDecoder.CARD_DATA_UUID, wrapper2)
+        assertEquals(1, readOuts.size) // Completed!
+        val card = (readOuts[0] as SiReadOut.Card).card
+        assertEquals(1504639L, card.cardNumber)
+    }
 }
+
 
