@@ -16,4 +16,12 @@ class UtilsTest {
         val expected = "519b5e8e489799d6243142ab53ad95e7e90ef160"
         assertEquals(expected, sha1(input))
     }
+
+    @Test
+    fun testTimeToString() {
+        assertEquals("--:--:--", timeToString(NO_TIME))
+        assertEquals("00:00:00", timeToString(0))
+        assertEquals("11:36:54", timeToString(11 * 3600 + 36 * 60 + 54))
+        assertEquals("00:01:55", timeToString(115))
+    }
 }

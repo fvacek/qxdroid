@@ -15,7 +15,7 @@ fun bytesFromHex(hexString: String): ByteArray {
         .toByteArray()
 }
 
-private const val NO_TIME = 61166
+const val NO_TIME = 61166
 fun timeToString(time: Int): String {
     if (time == NO_TIME) {
         return "--:--:--"

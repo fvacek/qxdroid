@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -215,10 +216,36 @@ fun ReadActivityLog(
                             if (isExpanded) {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 card.punches.forEachIndexed { punchIndex, punch ->
-                                    Text(
-                                        text = "${punchIndex + 1}. Code: ${punch.code}, Time: ${timeToString(punch.time)}",
-                                        modifier = Modifier.padding(start = 16.dp)
-                                    )
+                                    val prevTime = if (punchIndex == 0) card.startTime else card.punches[punchIndex - 1].time
+                                    val diffTime = if (prevTime != NO_TIME && punch.time != NO_TIME) {
+                                        val d = punch.time - prevTime
+                                        if (d < 0) d + 86400 else d
+                                    } else {
+                                        NO_TIME
+                                    }
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "${punchIndex + 1}.",
+                                            modifier = Modifier.width(32.dp)
+                                        )
+                                        Text(
+                                            text = "${punch.code}",
+                                            modifier = Modifier.width(48.dp)
+                                        )
+                                        Text(
+                                            text = timeToString(punch.time),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(
+                                            text = timeToString(diffTime),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
                                 }
                                 if (card.baterry != null) {
                                     Text(
